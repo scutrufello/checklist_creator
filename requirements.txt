@@ -1,0 +1,65 @@
+# Core Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Database
+psycopg2-binary==2.9.9
+redis==5.0.1
+sqlalchemy==2.0.23
+alembic==1.13.0
+
+# Web Scraping
+requests==2.31.0
+beautifulsoup4==4.12.2
+selenium==4.15.2
+scrapy==2.11.0
+lxml==4.9.3
+
+# VPN Management
+openvpn-api==0.3.0
+requests[socks]==2.31.0
+
+# Data Processing
+pandas==2.1.4
+numpy==1.25.2
+openpyxl==3.1.2
+xlrd==2.0.1
+
+# API and Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+httpx==0.25.2
+
+# Code Quality
+black==23.11.0
+flake8==6.1.0
+isort==5.12.0
+mypy==1.7.1
+
+# Development Tools
+python-dotenv==1.0.0
+click==8.1.7
+rich==13.7.0
+typer==0.9.0
+
+# Monitoring and Logging
+structlog==23.2.0
+prometheus-client==0.19.0
+
+# Security
+cryptography==41.0.8
+bandit==1.7.5
+safety==2.3.5
+
+# Utilities
+python-dateutil==2.8.2
+pytz==2023.3
+jinja2==3.1.2
