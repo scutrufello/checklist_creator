@@ -10,6 +10,9 @@ import uvicorn
 import os
 from dotenv import load_dotenv
 
+# Import API routers
+from .api.vpn import router as vpn_router
+
 # Load environment variables
 load_dotenv()
 
@@ -31,6 +34,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include API routers
+app.include_router(vpn_router)
+
 @app.get("/")
 async def root():
     """Root endpoint - API health check"""
@@ -40,9 +46,14 @@ async def root():
         "status": "healthy",
         "services": {
             "api": "running",
+            "vpn": "ready",
             "database": "checking...",
-            "vpn": "checking...",
             "scraping": "ready"
+        },
+        "endpoints": {
+            "vpn": "/api/v1/vpn/*",
+            "docs": "/docs",
+            "health": "/health"
         }
     }
 
@@ -55,7 +66,13 @@ async def health_check():
             "status": "healthy",
             "timestamp": "2024-08-24T00:00:00Z",
             "version": "1.0.0",
-            "environment": os.getenv("ENVIRONMENT", "development")
+            "environment": os.getenv("ENVIRONMENT", "development"),
+            "services": {
+                "api": "healthy",
+                "vpn": "ready",
+                "database": "checking...",
+                "scraping": "ready"
+            }
         }
         
         # TODO: Add database health check
@@ -86,13 +103,21 @@ async def api_status():
             "debug_mode": os.getenv("DEBUG", "False").lower() == "true",
             "api_host": os.getenv("API_HOST", "0.0.0.0"),
             "api_port": int(os.getenv("API_PORT", "8000"))
+        },
+        "endpoints": {
+            "vpn": {
+                "status": "/api/v1/vpn/status",
+                "connect": "/api/v1/vpn/connect",
+                "disconnect": "/api/v1/vpn/disconnect",
+                "health": "/api/v1/vpn/health",
+                "metrics": "/api/v1/vpn/metrics"
+            }
         }
     }
 
 @app.get("/api/v1/vpn/status")
 async def vpn_status():
-    """VPN connection status endpoint"""
-    # TODO: Implement actual VPN status checking
+    """VPN connection status endpoint (legacy - now handled by VPN router)"""
     return {
         "vpn": {
             "status": "disconnected",
@@ -102,10 +127,11 @@ async def vpn_status():
             "connection_time": "none"
         },
         "available_providers": [
-            "provider1",
-            "provider2",
-            "provider3"
-        ]
+            "openvpn",
+            "nordvpn",
+            "expressvpn"
+        ],
+        "note": "Use /api/v1/vpn/status for detailed status information"
     }
 
 @app.get("/api/v1/scraping/status")
@@ -136,6 +162,7 @@ if __name__ == "__main__":
     print(f"🚀 Starting Checklist Creator API on {host}:{port}")
     print(f"📚 API Documentation: http://{host}:{port}/docs")
     print(f"🔍 Health Check: http://{host}:{port}/health")
+    print(f"🔒 VPN Endpoints: http://{host}:{port}/api/v1/vpn/*")
     
     # Start the server
     uvicorn.run(
