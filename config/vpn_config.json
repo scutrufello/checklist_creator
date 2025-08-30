@@ -1,0 +1,16 @@
+{
+  "providers": {
+    "openvpn": {
+      "name": "openvpn",
+      "config_path": "/etc/openvpn/configs",
+      "credentials_path": "/etc/openvpn/auth.txt",
+      "servers": ["us-east", "us-west", "eu-west", "asia-east"],
+      "locations": ["United States", "Europe", "Asia"],
+      "max_connections": 1,
+      "health_check_url": "https://httpbin.org/ip",
+      "timeout": 30
+    }
+  },
+  "health_check_interval": 30,
+  "max_reconnect_attempts": 3
+}

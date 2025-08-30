@@ -9,7 +9,7 @@ import subprocess
 import time
 import json
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from enum import Enum
 import aiohttp
@@ -74,11 +74,17 @@ class VPNManager:
         self.max_reconnect_attempts = 3
         self.is_health_monitoring = False
         
+        # Store original IP address for comparison
+        self.original_ip_address: Optional[str] = None
+        
         # Load configuration
         self._load_config()
         
         # Initialize providers
         self._initialize_providers()
+        
+        # Store original IP address on initialization
+        asyncio.create_task(self._store_original_ip())
     
     def _load_config(self) -> None:
         """Load VPN configuration from file"""
@@ -429,8 +435,11 @@ class VPNManager:
     
     async def _get_original_ip(self) -> Optional[str]:
         """Get original public IP address (before VPN)"""
-        # This would ideally be stored when the system starts
-        # For now, we'll use a simple approach
+        # Return the stored original IP address
+        if self.original_ip_address:
+            return self.original_ip_address
+        
+        # Fallback: try to get current IP if original not stored
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get("https://httpbin.org/ip", timeout=10) as response:
@@ -441,6 +450,17 @@ class VPNManager:
         except Exception as e:
             logger.error(f"Error getting original IP: {e}")
             return None
+    
+    async def _store_original_ip(self) -> None:
+        """Store the original IP address when the VPN manager is initialized"""
+        try:
+            self.original_ip_address = await self._get_current_ip()
+            if self.original_ip_address:
+                logger.info(f"Original IP address stored: {self.original_ip_address}")
+            else:
+                logger.warning("Failed to store original IP address")
+        except Exception as e:
+            logger.error(f"Error storing original IP address: {e}")
     
     async def _start_health_monitoring(self) -> None:
         """Start VPN health monitoring"""
@@ -615,6 +635,30 @@ class VPNManager:
             }
             for conn in self.connection_history
         ]
+    
+    def get_original_ip(self) -> Optional[str]:
+        """Get the stored original IP address"""
+        return self.original_ip_address
+    
+    def get_ip_comparison(self) -> Dict[str, Any]:
+        """Get IP address comparison information"""
+        comparison = {
+            "original_ip": self.original_ip_address,
+            "current_ip": None,
+            "ip_changed": False,
+            "vpn_active": False
+        }
+        
+        if self.current_connection and self.current_connection.ip_address:
+            comparison["current_ip"] = self.current_connection.ip_address
+            comparison["ip_changed"] = (
+                self.original_ip_address != self.current_connection.ip_address
+            )
+            comparison["vpn_active"] = (
+                self.current_connection.status == VPNStatus.CONNECTED
+            )
+        
+        return comparison
     
     async def cleanup(self) -> None:
         """Cleanup VPN manager resources"""

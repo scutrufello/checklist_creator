@@ -358,5 +358,39 @@ async def cleanup_vpn(vpn_mgr: VPNManager = Depends(get_vpn_manager)):
         logger.error(f"Error during VPN cleanup: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to cleanup VPN manager: {str(e)}")
 
+@router.get("/ip-comparison")
+async def get_ip_comparison(vpn_mgr: VPNManager = Depends(get_vpn_manager)):
+    """
+    Get IP address comparison information
+    
+    Returns:
+        Dict: IP comparison details including original IP, current IP, and change status
+    """
+    try:
+        comparison = vpn_mgr.get_ip_comparison()
+        return comparison
+    except Exception as e:
+        logger.error(f"Error getting IP comparison: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get IP comparison: {str(e)}")
+
+@router.get("/original-ip")
+async def get_original_ip(vpn_mgr: VPNManager = Depends(get_vpn_manager)):
+    """
+    Get the original IP address (before VPN connection)
+    
+    Returns:
+        Dict: Original IP address information
+    """
+    try:
+        original_ip = vpn_mgr.get_original_ip()
+        return {
+            "original_ip": original_ip,
+            "timestamp": "stored_on_initialization",
+            "note": "This is the IP address before any VPN connection was established"
+        }
+    except Exception as e:
+        logger.error(f"Error getting original IP: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get original IP: {str(e)}")
+
 # Import time module for uptime calculations
 import time
