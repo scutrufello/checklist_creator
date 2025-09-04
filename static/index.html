@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phillies Cards Manager</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <h1><i class="fas fa-baseball-ball"></i> Phillies Cards Manager</h1>
+            <div class="header-actions">
+                <button id="settingsBtn" class="btn btn-secondary">
+                    <i class="fas fa-cog"></i> Settings
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+        <div class="container">
+            <!-- Search Bar -->
+            <div class="search-section">
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="Search for players, sets, or cards...">
+                    <button id="searchBtn" class="btn btn-primary">
+                        <i class="fas fa-search"></i> Search
+                    </button>
+                </div>
+            </div>
+
+            <!-- Navigation -->
+            <nav class="nav-tabs">
+                <button class="nav-tab active" data-view="years">
+                    <i class="fas fa-calendar"></i> Years
+                </button>
+                <button class="nav-tab" data-view="search">
+                    <i class="fas fa-search"></i> Search Results
+                </button>
+            </nav>
+
+            <!-- Years View -->
+            <div id="yearsView" class="view active">
+                <div class="years-grid" id="yearsGrid">
+                    <!-- Years will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Sets View -->
+            <div id="setsView" class="view">
+                <div class="sets-header">
+                    <button id="backToYears" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Years
+                    </button>
+                    <h2 id="setsYearTitle">1992 Sets</h2>
+                </div>
+                <div class="sets-grid" id="setsGrid">
+                    <!-- Sets will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Cards View -->
+            <div id="cardsView" class="view">
+                <div class="cards-header">
+                    <button id="backToSets" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Sets
+                    </button>
+                    <h2 id="cardsSetTitle">1992 Bowman</h2>
+                </div>
+                <div class="cards-grid" id="cardsGrid">
+                    <!-- Cards will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Search Results View -->
+            <div id="searchView" class="view">
+                <div class="search-results-header">
+                    <button id="backToYearsFromSearch" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Years
+                    </button>
+                    <h2 id="searchResultsTitle">Search Results</h2>
+                </div>
+                <div class="cards-grid" id="searchResultsGrid">
+                    <!-- Search results will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Loading Spinner -->
+            <div id="loadingSpinner" class="loading-spinner hidden">
+                <div class="spinner"></div>
+                <p>Loading...</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-cog"></i> Settings</h2>
+                <button class="close-btn" id="closeSettings">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-group">
+                    <h3>Data Management</h3>
+                    <button id="scrapeLatestBtn" class="btn btn-primary">
+                        <i class="fas fa-download"></i> Scrape Latest Year
+                    </button>
+                    <p class="setting-description">
+                        Trigger a scrape of the most recent year from TCDB
+                    </p>
+                    
+                    <button id="downloadImagesBtn" class="btn btn-success" style="margin-top: 1rem;">
+                        <i class="fas fa-images"></i> Trigger Image Download for 1992
+                    </button>
+                    <p class="setting-description">
+                        Trigger image download for all 1992 cards (run download script to execute)
+                    </p>
+                </div>
+                
+                <div class="setting-group">
+                    <h3>Database Statistics</h3>
+                    <div id="dbStats" class="stats-display">
+                        <!-- Stats will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card Detail Modal -->
+    <div id="cardModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="cardModalTitle">Card Details</h2>
+                <button class="close-btn" id="closeCardModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="cardModalContent">
+                    <!-- Card details will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
