@@ -1,0 +1,91 @@
+{
+  "_comment": "This is a template configuration file. Copy this to 'config.json' and fill in your actual values.",
+  "_warning": "NEVER commit the actual config.json file with real credentials to Git!",
+  "_gitignore": "config.json is already in .gitignore to prevent accidental commits",
+  
+  "vpn": {
+    "providers": {
+      "vyprvpn": {
+        "_comment": "VyprVPN configuration - credentials are stored securely via credential manager",
+        "enabled": true,
+        "update_interval_hours": 24,
+        "default_region": "North America",
+        "fallback_regions": ["Europe", "Asia"]
+      },
+      "openvpn": {
+        "_comment": "OpenVPN configuration for custom VPN services",
+        "enabled": true,
+        "config_directory": "/etc/openvpn/configs",
+        "auth_file": "/etc/openvpn/auth.txt"
+      }
+    },
+    "connection": {
+      "timeout_seconds": 30,
+      "retry_attempts": 3,
+      "health_check_interval": 60,
+      "auto_reconnect": true
+    }
+  },
+  
+  "scraping": {
+    "_comment": "Web scraping configuration",
+    "enabled": true,
+    "rate_limit_requests_per_minute": 60,
+    "user_agent": "ChecklistCreator/1.0.0",
+    "timeout_seconds": 30,
+    "max_retries": 3
+  },
+  
+  "api": {
+    "_comment": "API configuration",
+    "host": "0.0.0.0",
+    "port": 8000,
+    "debug": false,
+    "cors_origins": ["*"],
+    "rate_limit_requests_per_minute": 100
+  },
+  
+  "database": {
+    "_comment": "Database configuration - use environment variables for production",
+    "type": "postgresql",
+    "host": "localhost",
+    "port": 5432,
+    "name": "checklist_creator",
+    "user": "checklist_user",
+    "password": "CHANGE_THIS_PASSWORD"
+  },
+  
+  "logging": {
+    "_comment": "Logging configuration",
+    "level": "INFO",
+    "file": "logs/checklist_creator.log",
+    "max_size_mb": 100,
+    "backup_count": 5,
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  },
+  
+  "security": {
+    "_comment": "Security configuration",
+    "encryption_enabled": true,
+    "session_timeout_minutes": 60,
+    "max_login_attempts": 5,
+    "password_min_length": 12,
+    "require_2fa": false
+  },
+  
+  "monitoring": {
+    "_comment": "Monitoring and metrics configuration",
+    "enabled": true,
+    "metrics_port": 9090,
+    "health_check_endpoint": "/health",
+    "prometheus_endpoint": "/metrics"
+  },
+  
+  "development": {
+    "_comment": "Development-specific configuration",
+    "auto_reload": true,
+    "log_level": "DEBUG",
+    "mock_external_services": false,
+    "test_mode": false
+  }
+}

@@ -12,6 +12,10 @@ from dotenv import load_dotenv
 
 # Import API routers
 from .api.vpn import router as vpn_router
+from .api.vyprvpn import router as vyprvpn_router
+
+# Import scheduler
+from .services.scheduler import start_scheduler
 
 # Load environment variables
 load_dotenv()
@@ -36,6 +40,17 @@ app.add_middleware(
 
 # Include API routers
 app.include_router(vpn_router)
+app.include_router(vyprvpn_router)
+
+@app.on_event("startup")
+async def startup_event():
+    """Startup event - initialize services"""
+    print("🚀 Starting Checklist Creator services...")
+    
+    # Start the scheduler in the background
+    import asyncio
+    asyncio.create_task(start_scheduler())
+    print("✅ Scheduler started")
 
 @app.get("/")
 async def root():
@@ -47,11 +62,14 @@ async def root():
         "services": {
             "api": "running",
             "vpn": "ready",
+            "vyprvpn": "ready",
+            "scheduler": "running",
             "database": "checking...",
             "scraping": "ready"
         },
         "endpoints": {
             "vpn": "/api/v1/vpn/*",
+            "vyprvpn": "/api/v1/vyprvpn/*",
             "docs": "/docs",
             "health": "/health"
         }
@@ -67,12 +85,13 @@ async def health_check():
             "timestamp": "2024-08-24T00:00:00Z",
             "version": "1.0.0",
             "environment": os.getenv("ENVIRONMENT", "development"),
-            "services": {
-                "api": "healthy",
-                "vpn": "ready",
-                "database": "checking...",
-                "scraping": "ready"
-            }
+                    "services": {
+            "api": "healthy",
+            "vpn": "ready",
+            "vyprvpn": "ready",
+            "database": "checking...",
+            "scraping": "ready"
+        }
         }
         
         # TODO: Add database health check
