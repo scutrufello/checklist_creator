@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Phillies Cards Checklist{% endblock %}
+
+{% block content %}
+<div class="text-center mb-8">
+    <h1 class="text-3xl sm:text-4xl font-bold text-phillies-blue mb-2">Philadelphia Phillies</h1>
+    <p class="text-lg text-base-content/70">Card Collection Checklist</p>
+</div>
+
+{% if years %}
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for y in years %}
+    <a href="/year/{{ y.year }}" class="card bg-white shadow-md hover:shadow-xl transition-shadow border border-base-200 hover:border-phillies-red/30">
+        <div class="card-body p-5">
+            <div class="flex items-center justify-between">
+                <h2 class="card-title text-2xl font-bold text-phillies-blue">{{ y.year }}</h2>
+                <div class="badge badge-lg {% if y.owned_count == y.card_count and y.card_count > 0 %}badge-success{% else %}badge-ghost{% endif %}">
+                    {{ y.owned_count }}/{{ y.card_count }}
+                </div>
+            </div>
+            <p class="text-sm text-base-content/60">{{ y.set_count }} set{{ 's' if y.set_count != 1 else '' }}</p>
+            {% if y.card_count > 0 %}
+            <div class="w-full bg-base-200 rounded-full h-2.5 mt-2">
+                <div class="bg-phillies-red h-2.5 rounded-full progress-fill"
+                     style="width: {{ (y.owned_count / y.card_count * 100)|round(1) }}%"></div>
+            </div>
+            <p class="text-xs text-base-content/50 mt-1">{{ (y.owned_count / y.card_count * 100)|round(1) }}% complete</p>
+            {% endif %}
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-16">
+    <div class="text-6xl mb-4 text-base-content/20">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+        </svg>
+    </div>
+    <h2 class="text-xl font-semibold text-base-content/60 mb-2">No cards yet</h2>
+    <p class="text-base-content/40">Run the scraper to populate your checklist.</p>
+    <div class="mockup-code mt-6 max-w-md mx-auto text-left">
+        <pre data-prefix="$"><code>python scrape.py</code></pre>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

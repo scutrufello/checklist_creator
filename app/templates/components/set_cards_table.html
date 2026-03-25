@@ -1,0 +1,21 @@
+{% if cards %}
+<div class="overflow-x-auto mt-3">
+    <table class="table table-sm w-full">
+        <thead>
+            <tr class="bg-phillies-blue text-white">
+                <th class="w-10 text-center rounded-tl-lg">Own</th>
+                <th class="w-16">#</th>
+                <th>Player</th>
+                <th class="hidden sm:table-cell">Tags</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for card in cards %}
+            {% include "components/card_row.html" %}
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="text-sm text-base-content/60 mt-3">No cards in this set.</div>
+{% endif %}

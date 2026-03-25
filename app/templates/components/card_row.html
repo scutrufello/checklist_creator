@@ -1,0 +1,27 @@
+<tr id="card-{{ card.id }}" class="hover:bg-base-200/50 transition-colors {% if card.owned %}card-row-owned{% endif %}">
+    <td class="text-center">
+        <input type="checkbox"
+               class="checkbox checkbox-sm checkbox-success"
+               {% if card.owned %}checked{% endif %}
+               hx-post="/api/card/{{ card.id }}/toggle"
+               hx-target="#card-{{ card.id }}"
+               hx-swap="outerHTML"
+        />
+    </td>
+    <td class="font-mono text-sm card-number">{{ card.number }}</td>
+    <td class="font-medium">
+        <span>{{ card.player_name }}</span>
+        {% if card.variant_display %}
+        <div class="text-xs text-base-content/60 mt-0.5">{{ card.variant_display }}</div>
+        {% endif %}
+    </td>
+    <td class="hidden sm:table-cell">
+        {% if card.tags_list %}
+        <div class="flex flex-wrap gap-1">
+            {% for tag in card.tags_list %}
+            <span class="badge badge-xs badge-outline">{{ tag }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </td>
+</tr>

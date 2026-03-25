@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Phillies Cards Checklist{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.22/dist/full.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'phillies-red': '#E81828',
+                        'phillies-blue': '#002D72',
+                        'phillies-cream': '#F5F0E8',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #F5F0E8;
+        }
+        .phillies-gradient {
+            background: linear-gradient(135deg, #002D72 0%, #E81828 100%);
+        }
+        .card-row-owned {
+            background-color: #dcfce7;
+        }
+        .progress-fill {
+            transition: width 0.3s ease;
+        }
+        @media (max-width: 640px) {
+            .card-number { min-width: 3rem; }
+        }
+    </style>
+</head>
+<body class="min-h-screen" hx-boost="true">
+    <nav class="navbar phillies-gradient shadow-lg sticky top-0 z-50">
+        <div class="container mx-auto px-4">
+            <div class="flex-1">
+                <a href="/" class="text-xl sm:text-2xl font-bold text-white tracking-wide flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                    </svg>
+                    <span class="hidden sm:inline">Phillies Cards</span>
+                    <span class="sm:hidden">Phillies</span>
+                </a>
+            </div>
+            <div class="flex-none">
+                {% block nav_right %}{% endblock %}
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mx-auto px-4 py-6 max-w-5xl">
+        {% block breadcrumb %}{% endblock %}
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer footer-center p-4 text-base-content/60 text-sm mt-8">
+        <p>Phillies Cards Checklist &mdash; Data from TCDB</p>
+    </footer>
+</body>
+</html>

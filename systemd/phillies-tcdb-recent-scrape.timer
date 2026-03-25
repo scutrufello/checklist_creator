@@ -1,0 +1,11 @@
+[Unit]
+Description=Twice-daily Phillies TCDB refresh (current and prior year)
+
+[Timer]
+OnCalendar=*-*-* 00:01:00
+OnCalendar=*-*-* 12:01:00
+Persistent=true
+Unit=phillies-tcdb-recent-scrape.service
+
+[Install]
+WantedBy=timers.target

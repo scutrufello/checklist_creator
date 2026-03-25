@@ -1,0 +1,31 @@
+vpn:
+  auth_file: "./vpn/credentials.txt"
+  config_dir: "./vpn/configs/"
+  rotate_every: 25
+  connect_timeout: 30
+  # Max seconds to wait for `sudo killall openvpn` during rotate/cleanup (avoids infinite hang).
+  disconnect_kill_timeout: 45
+  # Log current public IP every N successful TCDB page fetches (0 = off). Helps spot blocks when you check logs later.
+  log_public_ip_every_n_requests: 25
+  # Set to false to run scraper without VPN (e.g. when TCDB blocks VPN IPs)
+  enabled: true
+
+scraper:
+  min_delay: 8
+  max_delay: 15
+  # HTTP timeouts (seconds). request_timeout is total; or set connect + read for more control.
+  # Slow VPN paths often need >90s for large TCDB team pages.
+  request_timeout: 120
+  year: 2024
+  team_id: 21
+  team_name: "Philadelphia-Phillies"
+  base_url: "https://www.tcdb.com"
+  resume: true
+  # When cloudscraper gets Cloudflare, try Playwright once. Set to false to disable.
+  use_playwright_fallback: true
+  # Set to false to show browser window (sometimes helps with strict Cloudflare).
+  playwright_headless: true
+
+storage:
+  db_path: "./data/phillies.db"
+  image_path: "./data/images/"

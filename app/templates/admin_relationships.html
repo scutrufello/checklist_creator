@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Relationship Review - Phillies Cards{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumbs text-sm mb-4">
+    <ul>
+        <li><a href="/" class="text-phillies-blue hover:text-phillies-red">Home</a></li>
+        <li class="font-semibold">Relationship Review</li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="mb-5">
+    <h1 class="text-2xl font-bold text-phillies-blue">Relationship Review</h1>
+    <p class="text-sm text-base-content/60 mt-1">
+        Review low-confidence parallel assignments and correct parent/type manually.
+    </p>
+</div>
+
+<form method="get" action="/admin/relationships" class="bg-white border border-base-200 rounded-lg p-4 mb-4 flex flex-wrap gap-3 items-end">
+    <label class="form-control">
+        <span class="label-text text-xs">Year (optional)</span>
+        <input type="number" name="year" value="{{ year if year is not none else '' }}" class="input input-sm input-bordered w-28">
+    </label>
+    <label class="form-control">
+        <span class="label-text text-xs">Max confidence</span>
+        <input type="number" step="0.01" min="0" max="1" name="max_conf" value="{{ max_conf }}" class="input input-sm input-bordered w-28">
+    </label>
+    <label class="form-control">
+        <span class="label-text text-xs">Row limit</span>
+        <input type="number" min="1" max="2000" name="limit" value="{{ limit }}" class="input input-sm input-bordered w-28">
+    </label>
+    <button class="btn btn-sm btn-primary">Apply</button>
+</form>
+
+<div class="mb-3 text-sm text-base-content/60">
+    Showing {{ reviews|length }} review row{{ 's' if reviews|length != 1 else '' }}.
+</div>
+
+<div class="space-y-3">
+    {% for row in reviews %}
+    <form method="post" action="/admin/relationships/update" class="bg-white border border-base-200 rounded-lg p-4">
+        <input type="hidden" name="set_id" value="{{ row.set.id }}">
+        <input type="hidden" name="year" value="{{ year if year is not none else '' }}">
+        <input type="hidden" name="max_conf" value="{{ max_conf }}">
+        <input type="hidden" name="limit" value="{{ limit }}">
+
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div>
+                <div class="font-semibold text-phillies-blue">{{ row.set.full_name }}</div>
+                <div class="text-xs text-base-content/60">
+                    Year {{ row.set.year }} | Set ID {{ row.set.id }} | Base family: {{ row.set.base_name }}
+                </div>
+            </div>
+            <a href="/set/{{ row.set.id }}/{{ row.set.url_slug }}" class="btn btn-xs btn-outline">Open set</a>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+            <label class="form-control">
+                <span class="label-text text-xs">Relationship type</span>
+                <select name="relationship_type" class="select select-sm select-bordered">
+                    {% set current_type = row.set.relationship_type or 'parallel' %}
+                    {% for t in ['parallel', 'variation', 'insert', 'standalone'] %}
+                    <option value="{{ t }}" {% if current_type == t %}selected{% endif %}>{{ t }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <label class="form-control">
+                <span class="label-text text-xs">Canonical parent set</span>
+                <select name="parent_id" class="select select-sm select-bordered">
+                    <option value="0">(none)</option>
+                    {% for p in row.parent_options %}
+                    <option value="{{ p.id }}" {% if row.set.canonical_parent_set_id == p.id %}selected{% endif %}>
+                        {{ p.full_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <div class="text-xs text-base-content/70">
+                <div>Current confidence: {{ row.set.relationship_confidence if row.set.relationship_confidence is not none else 'n/a' }}</div>
+                {% if row.current_parent %}
+                <div>Current parent: {{ row.current_parent.full_name }}</div>
+                {% endif %}
+                <button class="btn btn-sm btn-primary mt-2">Save</button>
+            </div>
+        </div>
+    </form>
+    {% endfor %}
+</div>
+
+{% if not reviews %}
+<div class="text-center py-12 text-base-content/50">
+    <p>No rows match this filter.</p>
+</div>
+{% endif %}
+{% endblock %}

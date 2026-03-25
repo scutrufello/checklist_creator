@@ -1,0 +1,298 @@
+{
+  "last_updated": "2026-03-25T18:00:04.731596+00:00",
+  "source": "https://support.giganews.com/hc/en-us/articles/360039615432",
+  "endpoints": [
+    {
+      "name": "Canada - Toronto",
+      "hostname": "ca1.vpn.giganews.com"
+    },
+    {
+      "name": "Mexico - Mexico City",
+      "hostname": "mx1.vpn.giganews.com"
+    },
+    {
+      "name": "U.S. - Austin, TX",
+      "hostname": "us3.vpn.giganews.com"
+    },
+    {
+      "name": "U.S. - Chicago, IL",
+      "hostname": "us6.vpn.giganews.com"
+    },
+    {
+      "name": "U.S. - Los Angeles, CA",
+      "hostname": "us1.vpn.giganews.com"
+    },
+    {
+      "name": "U.S. - Miami, FL",
+      "hostname": "us4.vpn.giganews.com"
+    },
+    {
+      "name": "U.S. - New York City, NY",
+      "hostname": "us5.vpn.giganews.com"
+    },
+    {
+      "name": "U.S. - San Francisco, CA",
+      "hostname": "us7.vpn.giganews.com"
+    },
+    {
+      "name": "U.S. - Seattle, WA",
+      "hostname": "us8.vpn.giganews.com"
+    },
+    {
+      "name": "U.S. - Washington, DC",
+      "hostname": "us2.vpn.giganews.com"
+    },
+    {
+      "name": "Austria - Vienna",
+      "hostname": "at1.vpn.giganews.com"
+    },
+    {
+      "name": "Belgium - Brussels",
+      "hostname": "be1.vpn.giganews.com"
+    },
+    {
+      "name": "Bulgaria - Sofia",
+      "hostname": "bg1.vpn.giganews.com"
+    },
+    {
+      "name": "Czech Republic - Prague",
+      "hostname": "cz1.vpn.giganews.com"
+    },
+    {
+      "name": "Denmark - Copenhagen",
+      "hostname": "dk1.vpn.giganews.com"
+    },
+    {
+      "name": "Luxembourg - Luxembourg City",
+      "hostname": "lu1.vpn.giganews.com"
+    },
+    {
+      "name": "Finland - Helsinki",
+      "hostname": "fi1.vpn.giganews.com"
+    },
+    {
+      "name": "France - Paris",
+      "hostname": "fr1.vpn.giganews.com"
+    },
+    {
+      "name": "Germany - Frankfurt",
+      "hostname": "de1.vpn.giganews.com"
+    },
+    {
+      "name": "Greece - Athens",
+      "hostname": "gr1.vpn.giganews.com"
+    },
+    {
+      "name": "Iceland - Reykjav\u00edk",
+      "hostname": "is1.vpn.giganews.com"
+    },
+    {
+      "name": "Ireland - Dublin",
+      "hostname": "ie1.vpn.giganews.com"
+    },
+    {
+      "name": "Italy - Rome",
+      "hostname": "it1.vpn.giganews.com"
+    },
+    {
+      "name": "Latvia - Riga",
+      "hostname": "lv1.vpn.giganews.com"
+    },
+    {
+      "name": "Liechtenstein - Schaan",
+      "hostname": "li1.vpn.giganews.com"
+    },
+    {
+      "name": "Lithuania - Vilnius",
+      "hostname": "lt1.vpn.giganews.com"
+    },
+    {
+      "name": "Netherlands - Amsterdam",
+      "hostname": "eu1.vpn.giganews.com"
+    },
+    {
+      "name": "Norway - Oslo",
+      "hostname": "no1.vpn.giganews.com"
+    },
+    {
+      "name": "Poland - Warsaw",
+      "hostname": "pl1.vpn.giganews.com"
+    },
+    {
+      "name": "Portugal - Lisbon",
+      "hostname": "pt1.vpn.giganews.com"
+    },
+    {
+      "name": "Romania - Bucharest",
+      "hostname": "ro1.vpn.giganews.com"
+    },
+    {
+      "name": "Russia - Moscow",
+      "hostname": "ru1.vpn.giganews.com"
+    },
+    {
+      "name": "Slovakia - Bratislava",
+      "hostname": "sk1.vpn.giganews.com"
+    },
+    {
+      "name": "Slovenia - Ljubljana",
+      "hostname": "si1.vpn.giganews.com"
+    },
+    {
+      "name": "Spain - Madrid",
+      "hostname": "es1.vpn.giganews.com"
+    },
+    {
+      "name": "Sweden - Stockholm",
+      "hostname": "se1.vpn.giganews.com"
+    },
+    {
+      "name": "Switzerland - Zurich",
+      "hostname": "ch1.vpn.giganews.com"
+    },
+    {
+      "name": "Turkey - Istanbul",
+      "hostname": "tr1.vpn.giganews.com"
+    },
+    {
+      "name": "U.K. - London",
+      "hostname": "uk1.vpn.giganews.com"
+    },
+    {
+      "name": "Ukraine - Kiev",
+      "hostname": "ua1.vpn.giganews.com"
+    },
+    {
+      "name": "Asia - Hong Kong",
+      "hostname": "hk1.vpn.giganews.com"
+    },
+    {
+      "name": "India - Mumbai",
+      "hostname": "in1.vpn.giganews.com"
+    },
+    {
+      "name": "Indonesia - Jakarta",
+      "hostname": "id1.vpn.giganews.com"
+    },
+    {
+      "name": "Japan - Tokyo",
+      "hostname": "jp1.vpn.giganews.com"
+    },
+    {
+      "name": "Macau - Macau",
+      "hostname": "mo1.vpn.giganews.com"
+    },
+    {
+      "name": "Malaysia - Kuala Lumpur",
+      "hostname": "my1.vpn.giganews.com"
+    },
+    {
+      "name": "Maldives - Mal\u00e9",
+      "hostname": "mv1.vpn.giganews.com"
+    },
+    {
+      "name": "Pakistan - Karachi",
+      "hostname": "pk1.vpn.giganews.com"
+    },
+    {
+      "name": "Philippines - Manila",
+      "hostname": "ph1.vpn.giganews.com"
+    },
+    {
+      "name": "Singapore - Singapore",
+      "hostname": "sg1.vpn.giganews.com"
+    },
+    {
+      "name": "South Korea - Seoul",
+      "hostname": "kr1.vpn.giganews.com"
+    },
+    {
+      "name": "Taiwan - Taipei",
+      "hostname": "tw1.vpn.giganews.com"
+    },
+    {
+      "name": "Thailand - Bangkok",
+      "hostname": "th1.vpn.giganews.com"
+    },
+    {
+      "name": "Vietnam - Hanoi",
+      "hostname": "vn1.vpn.giganews.com"
+    },
+    {
+      "name": "Australia - Melbourne",
+      "hostname": "au2.vpn.giganews.com"
+    },
+    {
+      "name": "Australia - Perth",
+      "hostname": "au3.vpn.giganews.com"
+    },
+    {
+      "name": "Australia - Sydney",
+      "hostname": "au1.vpn.giganews.com"
+    },
+    {
+      "name": "New Zealand - Auckland",
+      "hostname": "nz1.vpn.giganews.com"
+    },
+    {
+      "name": "Marshall Islands - Majuro",
+      "hostname": "mh1.vpn.giganews.com"
+    },
+    {
+      "name": "Algeria - Algiers",
+      "hostname": "dz1.vpn.giganews.com"
+    },
+    {
+      "name": "Egypt - Cairo",
+      "hostname": "eg1.vpn.giganews.com"
+    },
+    {
+      "name": "Costa Rica - San Jos\u00e9",
+      "hostname": "cr1.vpn.giganews.com"
+    },
+    {
+      "name": "Panama - Panama City",
+      "hostname": "pa1.vpn.giganews.com"
+    },
+    {
+      "name": "El Salvador - San Salvador",
+      "hostname": "sv1.vpn.giganews.com"
+    },
+    {
+      "name": "Argentina - Buenos Aires",
+      "hostname": "ar1.vpn.giganews.com"
+    },
+    {
+      "name": "Brazil - S\u00e3o Paulo",
+      "hostname": "br1.vpn.giganews.com"
+    },
+    {
+      "name": "Colombia - Bogot\u00e1",
+      "hostname": "co1.vpn.giganews.com"
+    },
+    {
+      "name": "Uruguay - Montevideo",
+      "hostname": "uy1.vpn.giganews.com"
+    },
+    {
+      "name": "Bahrain - Manama",
+      "hostname": "bh1.vpn.giganews.com"
+    },
+    {
+      "name": "Israel - Tel Aviv",
+      "hostname": "il1.vpn.giganews.com"
+    },
+    {
+      "name": "Qatar - Doha",
+      "hostname": "qa1.vpn.giganews.com"
+    },
+    {
+      "name": "Saudi Arabia - Riyadh",
+      "hostname": "sa1.vpn.giganews.com"
+    },
+    {
+      "name": "UAE - Dubai",
+      "hostname": "ae1.vpn.giganews.com"
+    }
+  ]
+}

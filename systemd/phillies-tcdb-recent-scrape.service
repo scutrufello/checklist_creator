@@ -1,0 +1,11 @@
+[Unit]
+Description=Phillies TCDB checklist scraper (current + previous calendar year)
+# Runs via phillies-tcdb-recent-scrape.timer (00:01 and 12:01 local time).
+# For timers to run when no user session is active: loginctl enable-linger %u
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/scutrufello/phillies-cards
+ExecStart=/home/scutrufello/phillies-cards/venv/bin/python /home/scutrufello/phillies-cards/scrape.py --recent-years
+StandardOutput=append:/home/scutrufello/phillies-cards/data/scrape_recent_timer.log
+StandardError=append:/home/scutrufello/phillies-cards/data/scrape_recent_timer.log

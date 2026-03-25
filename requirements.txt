@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+jinja2
+python-multipart
+aiofiles
+cloudscraper
+pyyaml
+beautifulsoup4
+httpx
+playwright

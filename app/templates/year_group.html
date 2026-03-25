@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}{{ group.base_set.full_name }} - {{ year }} - Phillies Cards{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumbs text-sm mb-4">
+    <ul>
+        <li><a href="/" class="text-phillies-blue hover:text-phillies-red">Home</a></li>
+        <li><a href="/year/{{ year }}" class="text-phillies-blue hover:text-phillies-red">{{ year }}</a></li>
+        <li class="font-semibold truncate max-w-[260px]">{{ group.base_set.full_name }}</li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-xl sm:text-2xl font-bold text-phillies-blue mb-1">{{ group.base_set.full_name }}</h1>
+    <div class="flex flex-wrap items-center gap-3 text-sm text-base-content/60">
+        <span>{{ group.group_owned }}/{{ group.group_total }} collected</span>
+        {% if group.group_total > 0 %}
+        <span>({{ (group.group_owned / group.group_total * 100)|round(1) }}%)</span>
+        {% endif %}
+        <span>{{ 1 + (group.children|length) }} set{{ 's' if (1 + group.children|length) != 1 else '' }}</span>
+    </div>
+
+    {% if group.group_total > 0 %}
+    <div class="w-full bg-base-200 rounded-full h-2 mt-3">
+        <div class="bg-phillies-red h-2 rounded-full progress-fill"
+             style="width: {{ (group.group_owned / group.group_total * 100)|round(1) }}%"></div>
+    </div>
+    {% endif %}
+</div>
+
+<div class="space-y-2">
+    <details id="set-accordion-{{ group.base_set.id }}" class="bg-white border border-base-200 rounded-lg">
+        <summary class="flex items-center justify-between p-3 cursor-pointer">
+            <div class="flex items-center gap-2 min-w-0">
+                <span class="badge badge-sm badge-outline">base</span>
+                <span class="font-medium truncate">{{ group.base_set.full_name }}</span>
+            </div>
+            <span class="text-sm text-base-content/60 shrink-0">{{ group.base_owned }}/{{ group.base_total }}</span>
+        </summary>
+
+        <div class="px-3 pb-3">
+            <div class="text-xs text-base-content/60 mb-2">
+                <a class="link link-primary" href="/set/{{ group.base_set.id }}/{{ group.base_set.url_slug }}">Open full set page</a>
+            </div>
+            <div
+                hx-get="/partials/set/{{ group.base_set.id }}/cards"
+                hx-trigger="toggle from:#set-accordion-{{ group.base_set.id }} once"
+                hx-target="this"
+                hx-swap="innerHTML"
+            >
+                <div class="text-sm text-base-content/50">Loading base cards...</div>
+            </div>
+
+            {% if section_data.base_parallels %}
+            <div class="mt-4 space-y-2">
+                <div class="text-xs uppercase tracking-wide text-base-content/50">Base parallels</div>
+                {% for child in section_data.base_parallels %}
+                <details id="set-accordion-{{ child.set.id }}" class="bg-base-100 border border-base-200 rounded-lg">
+                    <summary class="flex items-center justify-between p-3 cursor-pointer">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="badge badge-sm badge-outline badge-secondary">parallel</span>
+                            <span class="truncate">{{ child.set.display_name }}</span>
+                        </div>
+                        <span class="text-sm text-base-content/60 shrink-0">{{ child.owned }}/{{ child.total }}</span>
+                    </summary>
+                    <div class="px-3 pb-3">
+                        <div class="text-xs text-base-content/60 mb-2">
+                            <a class="link link-primary" href="/set/{{ child.set.id }}/{{ child.set.url_slug }}">Open full set page</a>
+                        </div>
+                        <div
+                            hx-get="/partials/set/{{ child.set.id }}/cards"
+                            hx-trigger="toggle from:#set-accordion-{{ child.set.id }} once"
+                            hx-target="this"
+                            hx-swap="innerHTML"
+                        >
+                            <div class="text-sm text-base-content/50">Loading cards...</div>
+                        </div>
+                    </div>
+                </details>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </details>
+
+    {% for section in section_data.sections %}
+    {% set child = section.parent %}
+    <details id="set-accordion-{{ child.set.id }}" class="bg-white border border-base-200 rounded-lg">
+        <summary class="flex items-center justify-between p-3 cursor-pointer">
+            <div class="flex items-center gap-2 min-w-0">
+                <span class="badge badge-sm badge-outline
+                    {% if child.set.set_type == 'parallel' %}badge-secondary
+                    {% elif child.set.set_type == 'insert' %}badge-accent
+                    {% endif %}">{{ child.set.set_type }}</span>
+                <span class="truncate">{{ child.set.display_name }}</span>
+            </div>
+            <span class="text-sm text-base-content/60 shrink-0">{{ child.owned }}/{{ child.total }}</span>
+        </summary>
+
+        <div class="px-3 pb-3">
+            <div class="text-xs text-base-content/60 mb-2">
+                <a class="link link-primary" href="/set/{{ child.set.id }}/{{ child.set.url_slug }}">Open full set page</a>
+            </div>
+            <div
+                hx-get="/partials/set/{{ child.set.id }}/cards"
+                hx-trigger="toggle from:#set-accordion-{{ child.set.id }} once"
+                hx-target="this"
+                hx-swap="innerHTML"
+            >
+                <div class="text-sm text-base-content/50">Loading cards...</div>
+            </div>
+
+            {% if section.parallels %}
+            <div class="mt-4 space-y-2">
+                <div class="text-xs uppercase tracking-wide text-base-content/50">Parallels</div>
+                {% for p in section.parallels %}
+                <details id="set-accordion-{{ p.set.id }}" class="bg-base-100 border border-base-200 rounded-lg">
+                    <summary class="flex items-center justify-between p-3 cursor-pointer">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="badge badge-sm badge-outline badge-secondary">parallel</span>
+                            <span class="truncate">{{ p.set.display_name }}</span>
+                        </div>
+                        <span class="text-sm text-base-content/60 shrink-0">{{ p.owned }}/{{ p.total }}</span>
+                    </summary>
+                    <div class="px-3 pb-3">
+                        <div class="text-xs text-base-content/60 mb-2">
+                            <a class="link link-primary" href="/set/{{ p.set.id }}/{{ p.set.url_slug }}">Open full set page</a>
+                        </div>
+                        <div
+                            hx-get="/partials/set/{{ p.set.id }}/cards"
+                            hx-trigger="toggle from:#set-accordion-{{ p.set.id }} once"
+                            hx-target="this"
+                            hx-swap="innerHTML"
+                        >
+                            <div class="text-sm text-base-content/50">Loading cards...</div>
+                        </div>
+                    </div>
+                </details>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </details>
+    {% endfor %}
+</div>
+{% endblock %}

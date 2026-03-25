@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}{{ card_set.full_name }} - Phillies Cards{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumbs text-sm mb-4">
+    <ul>
+        <li><a href="/" class="text-phillies-blue hover:text-phillies-red">Home</a></li>
+        <li><a href="/year/{{ card_set.year }}" class="text-phillies-blue hover:text-phillies-red">{{ card_set.year }}</a></li>
+        {% if parent %}
+        <li><a href="/set/{{ parent.id }}/{{ parent.url_slug }}" class="text-phillies-blue hover:text-phillies-red">{{ parent.base_name }}</a></li>
+        {% endif %}
+        <li class="font-semibold truncate max-w-[200px]">{{ card_set.display_name }}</li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-xl sm:text-2xl font-bold text-phillies-blue mb-1">{{ card_set.full_name }}</h1>
+    <div class="flex flex-wrap items-center gap-3 text-sm text-base-content/60">
+        <span class="badge badge-outline">{{ card_set.set_type }}</span>
+        <span id="set-counter">{{ owned }}/{{ total }} collected</span>
+        {% if total > 0 %}
+        <span>({{ (owned / total * 100)|round(1) }}%)</span>
+        {% endif %}
+    </div>
+
+    {% if total > 0 %}
+    <div class="w-full bg-base-200 rounded-full h-2 mt-3">
+        <div id="set-progress" class="bg-phillies-red h-2 rounded-full progress-fill"
+             style="width: {{ (owned / total * 100)|round(1) }}%"></div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Sibling sets navigation -->
+{% if siblings %}
+<div class="mb-4" x-data="{ showSiblings: false }">
+    <button @click="showSiblings = !showSiblings"
+            class="btn btn-sm btn-ghost text-phillies-blue">
+        <svg class="w-4 h-4 transition-transform" :class="{ 'rotate-180': showSiblings }"
+             xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+        Related sets ({{ siblings|length }})
+    </button>
+    <div x-show="showSiblings" x-transition class="flex flex-wrap gap-2 mt-2">
+        {% for sib in siblings %}
+        <a href="/set/{{ sib.id }}/{{ sib.url_slug }}" class="badge badge-outline hover:badge-primary transition-colors">
+            {{ sib.display_name }}
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Card list -->
+<div class="overflow-x-auto">
+    <table class="table table-sm w-full">
+        <thead>
+            <tr class="bg-phillies-blue text-white">
+                <th class="w-10 text-center rounded-tl-lg">Own</th>
+                <th class="w-16">#</th>
+                <th>Player</th>
+                <th class="hidden sm:table-cell">Tags</th>
+            </tr>
+        </thead>
+        <tbody id="card-list">
+            {% for card in cards %}
+            {% include "components/card_row.html" %}
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if not cards %}
+<div class="text-center py-12 text-base-content/50">
+    <p>No cards in this set.</p>
+</div>
+{% endif %}
+
+<script>
+document.body.addEventListener('htmx:afterSwap', function(evt) {
+    // Update the set counter after toggling
+    fetch('/api/stats/{{ card_set.id }}')
+        .then(r => r.json())
+        .then(data => {
+            const counter = document.getElementById('set-counter');
+            const progress = document.getElementById('set-progress');
+            if (counter) counter.textContent = data.owned + '/' + data.total + ' collected';
+            if (progress && data.total > 0) {
+                progress.style.width = (data.owned / data.total * 100).toFixed(1) + '%';
+            }
+        });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}{{ year }} - Phillies Cards{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumbs text-sm mb-4">
+    <ul>
+        <li><a href="/" class="text-phillies-blue hover:text-phillies-red">Home</a></li>
+        <li class="font-semibold">{{ year }}</li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl sm:text-3xl font-bold text-phillies-blue">{{ year }} Sets</h1>
+    <div class="text-sm text-base-content/60">{{ set_groups|length }} set group{{ 's' if set_groups|length != 1 else '' }}</div>
+</div>
+
+{% if set_groups %}
+<div class="space-y-4">
+    {% for group in set_groups %}
+    <a href="{% if group.children %}/year/{{ year }}/group/{{ group.base_set.id }}/{{ group.base_set.url_slug }}{% else %}/set/{{ group.base_set.id }}/{{ group.base_set.url_slug }}{% endif %}"
+       class="card bg-white shadow-md border border-base-200 hover:shadow-lg transition-shadow block">
+        <div class="card-body p-4 sm:p-5">
+            <div class="flex items-start justify-between gap-2">
+                <div class="flex-1 min-w-0">
+                    <h2 class="font-bold text-lg text-phillies-blue truncate">{{ group.base_set.full_name }}</h2>
+                    {% if group.children %}
+                    <p class="text-xs text-base-content/50 mt-0.5">
+                        {{ group.children|length }} variant{{ 's' if group.children|length != 1 else '' }}
+                    </p>
+                    {% endif %}
+                </div>
+                <div class="flex items-center gap-3 shrink-0">
+                    <div class="badge {% if group.group_owned == group.group_total and group.group_total > 0 %}badge-success{% else %}badge-ghost{% endif %}">
+                        {{ group.group_owned }}/{{ group.group_total }}
+                    </div>
+                    <svg class="w-5 h-5 text-base-content/40"
+                         xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Progress bar -->
+            {% if group.group_total > 0 %}
+            <div class="w-full bg-base-200 rounded-full h-1.5 mt-2">
+                <div class="bg-phillies-red h-1.5 rounded-full progress-fill"
+                     style="width: {{ (group.group_owned / group.group_total * 100)|round(1) }}%"></div>
+            </div>
+            {% endif %}
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-12 text-base-content/50">
+    <p>No sets found for {{ year }}.</p>
+</div>
+{% endif %}
+{% endblock %}

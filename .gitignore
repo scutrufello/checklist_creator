@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environments
+venv/
+.venv/
+.env
+.env.*
+
+# Local runtime data (do not publish)
+data/*.db
+data/*.log
+data/scrape_checkpoint.json
+data/images/
+
+# Secrets (OpenVPN user/pass)
+vpn/credentials.txt
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
