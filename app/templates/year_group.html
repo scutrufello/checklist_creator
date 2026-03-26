@@ -91,10 +91,11 @@
     <details id="set-accordion-{{ child.set.id }}" class="bg-white border border-base-200 rounded-lg">
         <summary class="flex items-center justify-between p-3 cursor-pointer">
             <div class="flex items-center gap-2 min-w-0">
+                {% set st = child.set.relationship_type or child.set.set_type %}
                 <span class="badge badge-sm badge-outline
-                    {% if child.set.set_type == 'parallel' %}badge-secondary
-                    {% elif child.set.set_type == 'insert' %}badge-accent
-                    {% endif %}">{{ child.set.set_type }}</span>
+                    {% if st == 'parallel' %}badge-secondary
+                    {% elif st == 'insert' %}badge-accent
+                    {% endif %}">{{ st }}</span>
                 <span class="truncate">{{ child.set.display_name }}</span>
             </div>
             <span class="text-sm text-base-content/60 shrink-0">{{ child.owned }}/{{ child.total }}</span>

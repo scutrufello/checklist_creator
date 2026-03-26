@@ -5,6 +5,24 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 
 
+def strip_redundant_variant_tag_prose(text: str) -> str:
+    """
+    TCDB often sends variation prose like 'SP, VAR VAR: Image Variation' while the same
+    information lives in structured tags. Strip leading SP,/VAR chains for display (and storage).
+    """
+    text = (text or "").strip()
+    if not text:
+        return ""
+    while True:
+        prev = text
+        text = re.sub(r"^SP\s*,\s*", "", text, flags=re.I).strip()
+        text = re.sub(r"^VAR\s*,\s*", "", text, flags=re.I).strip()
+        text = re.sub(r"^\s*VAR(?:IATION)?\s*[:\-]?\s*", "", text, flags=re.I).strip()
+        if text == prev:
+            break
+    return text
+
+
 class CardSet(Base):
     __tablename__ = "card_sets"
 
@@ -122,12 +140,8 @@ class Card(Base):
 
     @property
     def variant_display(self):
-        """Display variant text without redundant VAR prefix."""
-        text = (self.variant or "").strip()
-        if not text:
-            return ""
-        text = re.sub(r"^\s*VAR(?:IATION)?\s*[:\-]?\s*", "", text, flags=re.IGNORECASE).strip()
-        return text
+        """Human-readable variation line without redundant SP/VAR prefix noise."""
+        return strip_redundant_variant_tag_prose(self.variant or "")
 
     def __repr__(self):
         return f"<Card #{self.number} {self.player_name}>"

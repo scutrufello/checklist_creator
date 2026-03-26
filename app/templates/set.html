@@ -19,7 +19,7 @@
 <div class="mb-6">
     <h1 class="text-xl sm:text-2xl font-bold text-phillies-blue mb-1">{{ card_set.full_name }}</h1>
     <div class="flex flex-wrap items-center gap-3 text-sm text-base-content/60">
-        <span class="badge badge-outline">{{ card_set.set_type }}</span>
+        <span class="badge badge-outline">{{ card_set.relationship_type or card_set.set_type }}</span>
         <span id="set-counter">{{ owned }}/{{ total }} collected</span>
         {% if total > 0 %}
         <span>({{ (owned / total * 100)|round(1) }}%)</span>

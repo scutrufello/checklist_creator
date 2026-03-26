@@ -10,7 +10,7 @@ import cloudscraper
 import requests
 
 from app.database import get_session, init_db, load_config
-from app.models import Card, CardSet
+from app.models import Card, CardSet, strip_redundant_variant_tag_prose
 from scraper.hierarchy import build_hierarchy, classify_set_type, split_set_name
 from scraper.page_parser import ParsedCard, parse_team_page, parse_years_available
 from scraper.vpn_manager import VPNManager
@@ -450,8 +450,7 @@ def _variant_label(pc: "ParsedCard") -> str:
     is_variation = "VAR" in tags_upper or "variation" in raw.lower()
     if not is_variation or not raw:
         return ""
-    # Strip common prefixes so UI does not show duplicated "VAR VAR: ..."
-    label = re.sub(r"^\s*VAR(?:IATION)?\s*[:\-]?\s*", "", raw, flags=re.IGNORECASE).strip()
+    label = strip_redundant_variant_tag_prose(raw)
     # If nothing meaningful remains, keep raw as fallback.
     if not label:
         label = raw
