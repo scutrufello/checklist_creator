@@ -27,6 +27,111 @@ def get_db():
         db.close()
 
 
+# Year listing buckets (TCDB-style ordering). Checked top-to-bottom in _year_list_bucket.
+_YEAR_PROMO_TEAM_RE = re.compile(
+    r"(?i)"
+    r"(\bpromo\b|"
+    r"stadium giveaway|"
+    r"team issue|"
+    r"\bteam set\b|"
+    r"kids club|"
+    r"club 215|"
+    r"bobblehead|"
+    r"wrapper redemption|"
+    r"industry conference|"
+    r"\bnscc\b|"
+    r"national sports collectors convention|"
+    r"\bsga\b|"
+    r"rip night|"
+    r"fan appreciation|"
+    r"fan fest|"
+    r"\bfest autograph\b|"
+    r"\bphoto day\b|"
+    r"military appreciation|"
+    r"first pitch|"
+    r"ticket giveaway|"
+    r"luncheon|"
+    r"meet\s+and\s+greet|"
+    r"vip\s+event|"
+    r"photocards?|"
+    r"\bcard show\b)",
+)
+
+_YEAR_MILB_RE = re.compile(
+    r"(?i)"
+    r"\b(milb|minor\s+league|"
+    r"class\s*[ad]\b|single[-\s]?a|double[-\s]?a|triple[-\s]?a|"
+    r"threshers|blueclaws|ironpigs|fightin\b|fightin'? phils|"
+    r"lehigh valley|jersey shore|clearwater|lakewood|"
+    r"clearwater threshers|jersey shore blueclaws|"
+    r"\breading phillies\b|\breading fightin\b|"
+    r"affiliate|"
+    r"rise to the show|"
+    r"\bprospect team\b)",
+)
+
+_YEAR_MAJOR_UNLICENSED_RE = re.compile(
+    r"(?i)"
+    r"\(unlicensed\)|"
+    r"\bpanini\b|\bdonruss\b|\bleaf\b|\bonyx\b|\bsage\b|\bchoice\b|"
+    r"\bwild card\b|historic autographs|\bpress pass\b|\bfutera\b|\brazor\b|"
+    r"\btristar\b",
+)
+
+_YEAR_MAJOR_LICENSED_RE = re.compile(
+    r"(?i)"
+    r"\b("
+    r"topps|bowman|bowman'?s|stadium club|upper deck|\bfleer\b|\bscore\b|"
+    r"finest|heritage|archives|gypsy queen|big league|pro debut|"
+    r"museum collection|tribute|tier one|sterling|five star|diamond icons|"
+    r"gilded|pristine|dynasty|lucent|black.?white|brooklyn collection|"
+    r"chrome|cosmic chrome|"
+    r"allen\s*&\s*ginter|allen.{0,5}ginter"
+    r")\b",
+)
+
+_YEAR_SECTION_LABELS = (
+    "Major licensed releases",
+    "Major unlicensed releases",
+    "Minor league",
+    "Oddball & regional",
+    "Promos, giveaways & team issues",
+)
+
+
+def _year_list_bucket(card_set: CardSet) -> int:
+    """
+    Rough TCDB-like grouping for the year index. Order:
+    0 major licensed, 1 major unlicensed, 2 minors, 3 oddball, 4 promo/team.
+    """
+    text = f"{card_set.full_name} {card_set.base_name}"
+    if _YEAR_PROMO_TEAM_RE.search(text):
+        return 4
+    if _YEAR_MILB_RE.search(text):
+        return 2
+    if _YEAR_MAJOR_UNLICENSED_RE.search(text):
+        return 1
+    if _YEAR_MAJOR_LICENSED_RE.search(text):
+        return 0
+    return 3
+
+
+def _organize_year_list_sections(set_groups: list[dict]) -> list[dict]:
+    """Split year groups into ordered sections with stable in-section sorting."""
+    buckets: dict[int, list[dict]] = defaultdict(list)
+    for g in set_groups:
+        buckets[_year_list_bucket(g["base_set"])].append(g)
+
+    sections: list[dict] = []
+    for i, label in enumerate(_YEAR_SECTION_LABELS):
+        groups = buckets.get(i, [])
+        if not groups:
+            continue
+        groups.sort(key=lambda x: x["base_set"].full_name.lower())
+        sections.append({"label": label, "groups": groups})
+    return sections
+
+
 @app.on_event("startup")
 def startup():
     init_db()
@@ -99,10 +204,39 @@ def _build_year_set_groups(db: Session, year: int) -> list[dict]:
     return set_groups
 
 
+def _ui_bucket_for_parallel_child(
+    child_set: CardSet,
+    base_set: CardSet,
+    set_by_id: dict[int, CardSet],
+    section_by_parent_id: dict[int, dict],
+) -> tuple[str, int | None]:
+    """
+    Year-group UI only keys ``section_by_parent_id`` off *top-level* rows (insert / base / etc.),
+    not other parallels. Nested parallels (parallel of a parallel) must walk
+    ``canonical_parent_set_id`` until we hit a top-level insert section or the paper base.
+    """
+    pid = child_set.canonical_parent_set_id
+    seen: set[int] = set()
+    while pid is not None and pid not in seen:
+        seen.add(pid)
+        if pid == base_set.id:
+            return "base", None
+        if pid in section_by_parent_id:
+            return "section", pid
+        parent = set_by_id.get(pid)
+        if parent is None:
+            break
+        pid = parent.canonical_parent_set_id
+    return "base", None
+
+
 def _build_group_sections(db: Session, group: dict) -> dict:
     """Group children using explicit canonical parent links when available."""
     children = group["children"]
     base_set = group["base_set"]
+    set_by_id: dict[int, CardSet] = {base_set.id: base_set}
+    for ch in children:
+        set_by_id[ch["set"].id] = ch["set"]
 
     parallel_children = [
         c for c in children
@@ -119,11 +253,12 @@ def _build_group_sections(db: Session, group: dict) -> dict:
     has_explicit_mapping = any(c["set"].canonical_parent_set_id for c in parallel_children)
     if has_explicit_mapping:
         for child in parallel_children:
-            parent_id = child["set"].canonical_parent_set_id
-            if parent_id in section_by_parent_id:
-                section_by_parent_id[parent_id]["parallels"].append(child)
+            bucket, sid = _ui_bucket_for_parallel_child(
+                child["set"], base_set, set_by_id, section_by_parent_id
+            )
+            if bucket == "section" and sid is not None:
+                section_by_parent_id[sid]["parallels"].append(child)
             else:
-                # Either directly under base, or unresolved mapping.
                 base_parallels.append(child)
     else:
         # Fallback to checklist-overlap-based grouping for unmigrated data.
@@ -132,7 +267,6 @@ def _build_group_sections(db: Session, group: dict) -> dict:
             player = re.sub(r"\s+", " ", (player_name or "").strip().upper())
             return (num, player)
 
-        set_by_id = {base_set.id: base_set, **{c["set"].id: c["set"] for c in children}}
         set_ids = list(set_by_id.keys())
         card_rows = (
             db.query(Card.set_id, Card.number, Card.player_name)
@@ -205,11 +339,13 @@ def index(request: Request, db: Session = Depends(get_db)):
 def year_view(request: Request, year: int, db: Session = Depends(get_db)):
     """Show grouped sets for a year (one row per set group)."""
     set_groups = _build_year_set_groups(db, year)
+    year_sections = _organize_year_list_sections(set_groups)
 
     return templates.TemplateResponse("year.html", {
         "request": request,
         "year": year,
         "set_groups": set_groups,
+        "year_sections": year_sections,
     })
 
 

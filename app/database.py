@@ -36,6 +36,7 @@ def init_db():
     engine = get_engine()
     Base.metadata.create_all(engine)
     _ensure_card_set_columns()
+    _ensure_cards_indexes()
 
 
 def _ensure_card_set_columns():
@@ -65,5 +66,28 @@ def _ensure_card_set_columns():
         "CREATE INDEX IF NOT EXISTS ix_card_sets_relationship_type "
         "ON card_sets(relationship_type)"
     )
+    conn.commit()
+    conn.close()
+
+
+def _ensure_cards_indexes():
+    """
+    Drop legacy uniqueness on (set_id, number, variant).
+
+    That index collapses checklist rows for products with repeated labels like "NNO"
+    and prevents storing distinct cards that differ only by tcdb_cid/player.
+    """
+    config = load_config()
+    db_path = config["storage"]["db_path"]
+    if not os.path.isabs(db_path):
+        db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), db_path)
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT name FROM sqlite_master WHERE type='index' AND name='uq_set_number_variant'"
+    )
+    if cur.fetchone():
+        cur.execute("DROP INDEX uq_set_number_variant")
     conn.commit()
     conn.close()

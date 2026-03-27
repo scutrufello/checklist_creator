@@ -379,10 +379,11 @@ class TCDBScraper:
                     session.add(card_set)
                     session.flush()
 
-                # One row per (set, number, variant) so base and variations each have their own checkbox
+                # One row per TCDB card id inside a set. Using tcdb_cid avoids collisions on
+                # products where every card is "NNO" (e.g. 2025 Topps T205).
                 variant_label = _variant_label(pc)
                 existing = session.query(Card).filter_by(
-                    set_id=card_set.id, number=pc.number, variant=variant_label
+                    set_id=card_set.id, tcdb_cid=pc.cid
                 ).first()
                 if existing is None:
                     sort_num = _extract_sort_number(pc.number)
@@ -400,7 +401,13 @@ class TCDBScraper:
                     )
                     session.add(card)
                 else:
-                    # Same (set, number, variant) seen again (e.g. duplicate link); merge tags only
+                    # Same tcdb_cid seen again (e.g. duplicate link cell); refresh mutable fields and merge tags.
+                    existing.number = pc.number
+                    existing.variant = variant_label
+                    existing.sort_number = _extract_sort_number(pc.number)
+                    existing.player_name = pc.player_name
+                    existing.tcdb_url = pc.url
+                    existing.raw_tags_text = pc.raw_tags_text
                     merged_tags = list({t for t in (existing.tags_list + pc.tags) if t and len(t) <= 12})
                     existing.tags = json.dumps(_normalize_tags(merged_tags)) if merged_tags else None
 

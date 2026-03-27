@@ -17,43 +17,43 @@
     <div class="text-sm text-base-content/60">{{ set_groups|length }} set group{{ 's' if set_groups|length != 1 else '' }}</div>
 </div>
 
-{% if set_groups %}
-<div class="space-y-4">
-    {% for group in set_groups %}
-    <a href="{% if group.children %}/year/{{ year }}/group/{{ group.base_set.id }}/{{ group.base_set.url_slug }}{% else %}/set/{{ group.base_set.id }}/{{ group.base_set.url_slug }}{% endif %}"
-       class="card bg-white shadow-md border border-base-200 hover:shadow-lg transition-shadow block">
-        <div class="card-body p-4 sm:p-5">
-            <div class="flex items-start justify-between gap-2">
-                <div class="flex-1 min-w-0">
-                    <h2 class="font-bold text-lg text-phillies-blue truncate">{{ group.base_set.full_name }}</h2>
+{% if year_sections %}
+{% for section in year_sections %}
+<section class="mb-10 last:mb-0">
+    <h2 class="text-sm font-semibold uppercase tracking-wide text-phillies-blue/80 border-b border-base-300 pb-2 mb-4">
+        {{ section.label }}
+    </h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+        {% for group in section.groups %}
+        <a href="{% if group.children %}/year/{{ year }}/group/{{ group.base_set.id }}/{{ group.base_set.url_slug }}{% else %}/set/{{ group.base_set.id }}/{{ group.base_set.url_slug }}{% endif %}"
+           class="card bg-white shadow-sm border border-base-200 hover:shadow-md hover:border-phillies-blue/30 transition-all block min-h-[5.5rem]">
+            <div class="card-body p-3 sm:p-4 flex flex-col justify-between gap-2">
+                <div class="min-w-0">
+                    <h3 class="font-semibold text-sm sm:text-base text-phillies-blue leading-snug line-clamp-3"
+                        title="{{ group.base_set.full_name }}">{{ group.base_set.full_name }}</h3>
                     {% if group.children %}
-                    <p class="text-xs text-base-content/50 mt-0.5">
-                        {{ group.children|length }} variant{{ 's' if group.children|length != 1 else '' }}
+                    <p class="text-xs text-base-content/50 mt-1">
+                        + {{ group.children|length }} variant{{ 's' if group.children|length != 1 else '' }}
                     </p>
                     {% endif %}
                 </div>
-                <div class="flex items-center gap-3 shrink-0">
-                    <div class="badge {% if group.group_owned == group.group_total and group.group_total > 0 %}badge-success{% else %}badge-ghost{% endif %}">
+                <div class="flex items-center justify-end gap-2">
+                    <span class="badge badge-sm {% if group.group_owned == group.group_total and group.group_total > 0 %}badge-success{% else %}badge-ghost{% endif %}">
                         {{ group.group_owned }}/{{ group.group_total }}
-                    </div>
-                    <svg class="w-5 h-5 text-base-content/40"
-                         xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-                    </svg>
+                    </span>
                 </div>
+                {% if group.group_total > 0 %}
+                <div class="w-full bg-base-200 rounded-full h-1">
+                    <div class="bg-phillies-red h-1 rounded-full progress-fill"
+                         style="width: {{ (group.group_owned / group.group_total * 100)|round(1) }}%"></div>
+                </div>
+                {% endif %}
             </div>
-
-            <!-- Progress bar -->
-            {% if group.group_total > 0 %}
-            <div class="w-full bg-base-200 rounded-full h-1.5 mt-2">
-                <div class="bg-phillies-red h-1.5 rounded-full progress-fill"
-                     style="width: {{ (group.group_owned / group.group_total * 100)|round(1) }}%"></div>
-            </div>
-            {% endif %}
-        </div>
-    </a>
-    {% endfor %}
-</div>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+{% endfor %}
 {% else %}
 <div class="text-center py-12 text-base-content/50">
     <p>No sets found for {{ year }}.</p>

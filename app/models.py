@@ -89,7 +89,6 @@ class Card(Base):
 
     __table_args__ = (
         UniqueConstraint("set_id", "tcdb_cid", name="uq_set_card"),
-        UniqueConstraint("set_id", "number", "variant", name="uq_set_number_variant"),
     )
 
     @property

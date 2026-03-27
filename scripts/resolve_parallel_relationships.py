@@ -201,32 +201,207 @@ def _heritage_identical_roster_parallels_to_flagship(
         s.relationship_confidence = 1.0
 
 
-# Bare flagship only (not "Topps Chrome", "Topps Update", etc.)
-_TOPPS_FLAGSHIP_BASE_NAME = re.compile(r"^\d{4} Topps$")
+# Paper ``YYYY Topps`` + ``YYYY Topps Update`` (not Chrome, Allen & Ginter, etc.).
+_TOPPS_PAPER_ROSTER_PARALLEL_BASE = re.compile(r"^\d{4} Topps(?: Update)?$")
+_TOPPS_ARCHIVES_BASE = re.compile(r"^\d{4} Topps Archives$")
 
-def _topps_flagship_identical_roster_parallels(
+# Paper Stadium Club flagship only (not mixed lines like "Triple Threads Stadium Club").
+_STADIUM_CLUB_FLAGSHIP_BASE_NAME = re.compile(r"^\d{4} Stadium Club$")
+
+# ``YYYY Topps Tier One`` flagship.
+_TIER_ONE_FLAGSHIP_BASE_NAME = re.compile(r"^\d{4} Topps Tier One$")
+
+# ``YYYY Topps x Bob Ross: The Joy of Baseball`` — color stock parallels share the flagship
+# checklist; on team-filtered DBs they appear as strict subsets of the base keys, so roster
+# *equality* never fires. Any non-empty checklist contained in the flagship is a base parallel.
+_BOB_ROSS_JOY_FLAGSHIP_BASE_NAME = re.compile(
+    r"^\d{4} Topps x Bob Ross: The Joy of Baseball$",
+    re.I,
+)
+
+# Stock parallels that omit "Foil"/"Refractor" in the variant, so classify_set_type marks them insert.
+_STADIUM_CLUB_BASE_STOCK_VARIANT_CORES = frozenset({
+    "black and white",
+    "lime green",
+    "members only",
+    "sepia",
+    # TCDB uses straight or curly apostrophe; norm_text → "photographer s …"
+    "photographer s proofs",
+    "photographer s proof",
+})
+
+
+def _is_stadium_club_base_stock_parallel_variant(variant_name: str | None) -> bool:
+    n = norm_text(variant_name)
+    if not n:
+        return False
+    if n in _STADIUM_CLUB_BASE_STOCK_VARIANT_CORES:
+        return True
+    # Printing Plates Black / Cyan / Magenta / Yellow (and any future plate ink row).
+    if n.startswith("printing plates "):
+        return True
+    return False
+
+
+def _bob_ross_joy_subset_checklist_parallels_to_flagship(
     group_sets: list[CardSet],
     root_base: CardSet,
     sig_by_set_id: dict[int, set[str]],
 ) -> None:
     """
-    For ``YYYY Topps`` (paper flagship), many stock parallels (borders, sandglitter, plates,
-    holiday stock, etc.) reuse the exact same team checklist as the base set but lack
-    ``foil``/``refractor`` in the name, so heuristics leave them as insert.
+    Bob Ross flagship parallels mirror the base checklist, but Phillies-only rows are often a
+    strict subset of the base team's keyed cards, so ``sig == base_sig`` never matches.
 
-    If (number, player) keys match the flagship exactly, treat as parallels.
-
-    Confetti / Confetti *: TCDB often uses different ``player_name`` text on league-leader
-    rows vs the flagship, so ``card_core_key`` never matches even though it is the same
-    stock parallel family — force those lines to the flagship as well.
+    If a sibling line's keys are a non-empty subset of the flagship checklist, it is a stock
+    parallel (paint colors, Easel, etc.), not a separate insert family.
     """
     if root_base.variant_name is not None:
         return
-    if not _TOPPS_FLAGSHIP_BASE_NAME.match((root_base.base_name or "").strip()):
+    if not _BOB_ROSS_JOY_FLAGSHIP_BASE_NAME.match((root_base.base_name or "").strip()):
         return
     base_sig = sig_by_set_id.get(root_base.id)
     if not base_sig:
         return
+    for s in group_sets:
+        if s.id == root_base.id:
+            continue
+        if s.base_name != root_base.base_name:
+            continue
+        cs = sig_by_set_id.get(s.id)
+        if not cs:
+            continue
+        if not cs <= base_sig:
+            continue
+        s.relationship_type = "parallel"
+        s.canonical_parent_set_id = root_base.id
+        s.relationship_confidence = 1.0
+
+
+def _bob_ross_joy_autograph_plate_family(
+    group_sets: list[CardSet],
+    root_base: CardSet,
+) -> None:
+    """
+    ``Autographs <color>`` lines share one insert family; TCDB uses different card numbers per
+    plate (e.g. 56A … 56H), so checklist overlap never links them.
+
+    Anchor / “base autograph” row: an exact ``Autographs`` variant if TCDB ever adds one,
+    otherwise the lowest ``tcdb_sid`` among color plates (TCDB primary listing). All other
+    autograph plates become parallels of that anchor — mirrors ``Bat On Ball`` handling.
+    """
+    if root_base.variant_name is not None:
+        return
+    if not _BOB_ROSS_JOY_FLAGSHIP_BASE_NAME.match((root_base.base_name or "").strip()):
+        return
+
+    auto: list[CardSet] = []
+    for s in group_sets:
+        if s.base_name != root_base.base_name:
+            continue
+        vn = (s.variant_name or "").strip()
+        if not vn:
+            continue
+        vl = vn.lower()
+        if vl == "autographs" or vl.startswith("autographs "):
+            auto.append(s)
+    if len(auto) < 2:
+        return
+
+    bare = [s for s in auto if (s.variant_name or "").strip() == "Autographs"]
+    if bare:
+        anchor = min(bare, key=lambda s: s.tcdb_sid)
+    else:
+        anchor = min(auto, key=lambda s: s.tcdb_sid)
+
+    for s in auto:
+        if s.id == anchor.id:
+            s.relationship_type = "insert"
+            s.canonical_parent_set_id = None
+            s.relationship_confidence = None
+            continue
+        s.relationship_type = "parallel"
+        s.canonical_parent_set_id = anchor.id
+        s.relationship_confidence = 1.0
+
+
+def _stadium_club_named_base_parallels_to_flagship(
+    group_sets: list[CardSet],
+    root_base: CardSet,
+) -> None:
+    """
+    Stadium Club base-stock parallels (B&W, sepia, plates, etc.) often share the flagship
+    checklist but do not trigger parallel_keywords on the variant, so they stay ``insert``.
+    Pin them to the root ``YYYY Stadium Club`` row.
+    """
+    if root_base.variant_name is not None:
+        return
+    if not _STADIUM_CLUB_FLAGSHIP_BASE_NAME.match((root_base.base_name or "").strip()):
+        return
+    for s in group_sets:
+        if s.id == root_base.id:
+            continue
+        if s.base_name != root_base.base_name:
+            continue
+        if not _is_stadium_club_base_stock_parallel_variant(s.variant_name):
+            continue
+        s.relationship_type = "parallel"
+        s.canonical_parent_set_id = root_base.id
+        s.relationship_confidence = 1.0
+
+
+def _tier_one_printing_plates_to_flagship(
+    group_sets: list[CardSet],
+    root_base: CardSet,
+) -> None:
+    """
+    Tier One printing plates are base-stock parallels but often classify as insert because
+    the variant title is just ``Printing Plates <ink>``. Attach them to flagship Tier One.
+    """
+    if root_base.variant_name is not None:
+        return
+    if not _TIER_ONE_FLAGSHIP_BASE_NAME.match((root_base.base_name or "").strip()):
+        return
+    for s in group_sets:
+        if s.id == root_base.id:
+            continue
+        if s.base_name != root_base.base_name:
+            continue
+        vn = norm_text(s.variant_name)
+        if not vn.startswith("printing plates "):
+            continue
+        s.relationship_type = "parallel"
+        s.canonical_parent_set_id = root_base.id
+        s.relationship_confidence = 1.0
+
+def _topps_flagship_identical_roster_parallels(
+    group_sets: list[CardSet],
+    root_base: CardSet,
+    sig_by_set_id: dict[int, set[str]],
+    cards_by_set_id: dict[int, list[Card]],
+) -> None:
+    """
+    For ``YYYY Topps`` and ``YYYY Topps Update``, many stock parallels (Canvas, foils, plates,
+    sandglitter, etc.) reuse the flagship checklist but lack obvious parallel keywords.
+
+    If ``card_core_key`` signatures match the flagship, treat as parallels.
+
+    When TCDB spells combo or league rows differently on the parallel line, keys may diverge
+    even though the card **numbers** are the same — compare sorted ``norm_number`` tuples as a
+    fallback (same approach as aligning Update with flagship handling for 2026 Topps).
+
+    Confetti / Confetti *: name drift on league-leader rows — force to flagship without keys.
+
+    Scoped the same way as before: not Chrome, not mixed product ``base_name`` strings.
+    """
+    if root_base.variant_name is not None:
+        return
+    if not _TOPPS_PAPER_ROSTER_PARALLEL_BASE.match((root_base.base_name or "").strip()):
+        return
+    base_cards = cards_by_set_id.get(root_base.id, [])
+    if not base_cards:
+        return
+    base_sig = sig_by_set_id.get(root_base.id)
+    base_num_tuple = tuple(sorted(norm_number(c.number) for c in base_cards))
     for s in group_sets:
         if s.id == root_base.id:
             continue
@@ -236,11 +411,16 @@ def _topps_flagship_identical_roster_parallels(
             s.canonical_parent_set_id = root_base.id
             s.relationship_confidence = 1.0
             continue
-        if sig_by_set_id.get(s.id) != base_sig:
+        if base_sig and sig_by_set_id.get(s.id) == base_sig:
+            s.relationship_type = "parallel"
+            s.canonical_parent_set_id = root_base.id
+            s.relationship_confidence = 1.0
             continue
-        s.relationship_type = "parallel"
-        s.canonical_parent_set_id = root_base.id
-        s.relationship_confidence = 1.0
+        child_nums = tuple(sorted(norm_number(c.number) for c in cards_by_set_id.get(s.id, [])))
+        if child_nums == base_num_tuple:
+            s.relationship_type = "parallel"
+            s.canonical_parent_set_id = root_base.id
+            s.relationship_confidence = 1.0
 
 
 def _heritage_chrome_parallels_to_flagship(group_sets: list[CardSet], root_base: CardSet) -> None:
@@ -260,6 +440,60 @@ def _heritage_chrome_parallels_to_flagship(group_sets: list[CardSet], root_base:
         if not vn:
             continue
         if vn != "Chrome" and not vn.startswith("Chrome "):
+            continue
+        s.relationship_type = "parallel"
+        s.canonical_parent_set_id = root_base.id
+        s.relationship_confidence = 1.0
+
+
+def _topps_archives_identical_roster_parallels_to_flagship(
+    group_sets: list[CardSet],
+    root_base: CardSet,
+    sig_by_set_id: dict[int, set[str]],
+) -> None:
+    """
+    Archives base-stock parallels (foilboards, printing plates, etc.) often classify as insert
+    due to color words, but when their (number, player) signature matches Archives flagship
+    exactly they should attach to the flagship row.
+    """
+    if root_base.variant_name is not None:
+        return
+    if not _TOPPS_ARCHIVES_BASE.match((root_base.base_name or "").strip()):
+        return
+    base_sig = sig_by_set_id.get(root_base.id)
+    if not base_sig:
+        return
+    for s in group_sets:
+        if s.id == root_base.id:
+            continue
+        if sig_by_set_id.get(s.id) != base_sig:
+            continue
+        s.relationship_type = "parallel"
+        s.canonical_parent_set_id = root_base.id
+        s.relationship_confidence = 1.0
+
+
+def _identical_roster_parallels_to_group_base(
+    group_sets: list[CardSet],
+    root_base: CardSet,
+    sig_by_set_id: dict[int, set[str]],
+) -> None:
+    """
+    Generic fallback: if a sibling set has the exact same (number, player) signature as the
+    group base, classify it as a base parallel.
+
+    This intentionally flattens products where TCDB model is "base + many pattern/color versions"
+    under one checklist umbrella (e.g. Tek-like families).
+    """
+    if root_base.variant_name is not None:
+        return
+    base_sig = sig_by_set_id.get(root_base.id)
+    if not base_sig:
+        return
+    for s in group_sets:
+        if s.id == root_base.id:
+            continue
+        if sig_by_set_id.get(s.id) != base_sig:
             continue
         s.relationship_type = "parallel"
         s.canonical_parent_set_id = root_base.id
@@ -357,8 +591,26 @@ def resolve_group_relationships(group_sets: list[CardSet], cards_by_set_id: dict
     # are parallels of that flagship too (not nested under a synthetic "Chrome" insert).
     _heritage_chrome_parallels_to_flagship(group_sets, root_base)
 
-    # ``YYYY Topps`` paper: identical roster as flagship ⇒ parallel (borders, sandglitter, …).
-    _topps_flagship_identical_roster_parallels(group_sets, root_base, sig_by_set_id)
+    # ``YYYY Topps`` / ``Update``: roster matched on keys and/or card numbers (see docstring).
+    _topps_flagship_identical_roster_parallels(group_sets, root_base, sig_by_set_id, cards_by_set_id)
+
+    # ``YYYY Topps Archives``: base-stock color/plate lines with same roster are base parallels.
+    _topps_archives_identical_roster_parallels_to_flagship(group_sets, root_base, sig_by_set_id)
+
+    # ``YYYY Stadium Club`` named stock parallels (no "Foil" in the variant title).
+    _stadium_club_named_base_parallels_to_flagship(group_sets, root_base)
+
+    # ``YYYY Topps Tier One`` printing plates are base-stock parallels.
+    _tier_one_printing_plates_to_flagship(group_sets, root_base)
+
+    # ``Topps x Bob Ross: The Joy of Baseball``: parallel checklists ⊆ flagship on team pages.
+    _bob_ross_joy_subset_checklist_parallels_to_flagship(group_sets, root_base, sig_by_set_id)
+
+    # Bob Ross autograph plates: one insert anchor, rest parallels (see docstring).
+    _bob_ross_joy_autograph_plate_family(group_sets, root_base)
+
+    # Global fallback: same checklist as group base => base parallel.
+    _identical_roster_parallels_to_group_base(group_sets, root_base, sig_by_set_id)
 
     # Keep set_type aligned with resolver output (UI and build_hierarchy name heuristics often
     # still say "insert" for lines we proved are parallels, e.g. "8 Bit Ballers Black").
