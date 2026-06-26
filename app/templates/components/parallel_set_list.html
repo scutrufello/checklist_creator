@@ -1,0 +1,69 @@
+{# Numbered parallels (by print run, rarest last) + unnumbered (A–Z). Expect parallels_partitioned: {numbered, unnumbered} #}
+{% macro parallel_blocks(parallels_partitioned, id_prefix) %}
+{% if parallels_partitioned.numbered %}
+<details class="bg-base-100 border border-base-200 rounded-lg" open>
+    <summary class="px-3 py-2 cursor-pointer text-xs uppercase tracking-wide text-base-content/50">
+        Numbered parallels ({{ parallels_partitioned.numbered|length }})
+    </summary>
+    <div class="px-3 pb-3 space-y-2">
+        {% for p in parallels_partitioned.numbered %}
+        <details id="set-accordion-{{ id_prefix }}-num-{{ p.set.id }}" class="bg-base-200/40 border border-base-200 rounded-lg">
+            <summary class="flex items-center justify-between p-3 cursor-pointer">
+                <div class="flex items-center gap-2 min-w-0">
+                    <span class="badge badge-sm badge-outline badge-secondary">parallel</span>
+                    <span class="truncate">{{ p.set.display_name }}</span>
+                </div>
+                <span class="text-sm text-base-content/60 shrink-0">{{ p.owned }}/{{ p.total }}</span>
+            </summary>
+            <div class="px-3 pb-3">
+                <div class="text-xs text-base-content/60 mb-2">
+                    <a class="link link-primary" href="/set/{{ p.set.id }}/{{ p.set.url_slug }}">Open full set page</a>
+                </div>
+                <div
+                    hx-get="/partials/set/{{ p.set.id }}/cards"
+                    hx-trigger="toggle from:#set-accordion-{{ id_prefix }}-num-{{ p.set.id }} once"
+                    hx-target="this"
+                    hx-swap="innerHTML"
+                >
+                    <div class="text-sm text-base-content/50">Loading cards...</div>
+                </div>
+            </div>
+        </details>
+        {% endfor %}
+    </div>
+</details>
+{% endif %}
+{% if parallels_partitioned.unnumbered %}
+<details class="bg-base-100 border border-base-200 rounded-lg {% if parallels_partitioned.numbered %}mt-2{% endif %}">
+    <summary class="px-3 py-2 cursor-pointer text-xs uppercase tracking-wide text-base-content/50">
+        Unnumbered parallels ({{ parallels_partitioned.unnumbered|length }})
+    </summary>
+    <div class="px-3 pb-3 space-y-2">
+        {% for p in parallels_partitioned.unnumbered %}
+        <details id="set-accordion-{{ id_prefix }}-unnum-{{ p.set.id }}" class="bg-base-200/40 border border-base-200 rounded-lg">
+            <summary class="flex items-center justify-between p-3 cursor-pointer">
+                <div class="flex items-center gap-2 min-w-0">
+                    <span class="badge badge-sm badge-outline badge-secondary">parallel</span>
+                    <span class="truncate">{{ p.set.display_name }}</span>
+                </div>
+                <span class="text-sm text-base-content/60 shrink-0">{{ p.owned }}/{{ p.total }}</span>
+            </summary>
+            <div class="px-3 pb-3">
+                <div class="text-xs text-base-content/60 mb-2">
+                    <a class="link link-primary" href="/set/{{ p.set.id }}/{{ p.set.url_slug }}">Open full set page</a>
+                </div>
+                <div
+                    hx-get="/partials/set/{{ p.set.id }}/cards"
+                    hx-trigger="toggle from:#set-accordion-{{ id_prefix }}-unnum-{{ p.set.id }} once"
+                    hx-target="this"
+                    hx-swap="innerHTML"
+                >
+                    <div class="text-sm text-base-content/50">Loading cards...</div>
+                </div>
+            </div>
+        </details>
+        {% endfor %}
+    </div>
+</details>
+{% endif %}
+{% endmacro %}

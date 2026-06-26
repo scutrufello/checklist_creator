@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block title %}Admin {{ year }} - Phillies Cards{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumbs text-sm mb-4">
+    <ul>
+        <li><a href="/" class="text-phillies-blue hover:text-phillies-red">Home</a></li>
+        <li><a href="/admin" class="text-phillies-blue hover:text-phillies-red">Admin</a></li>
+        <li class="font-semibold">{{ year }}</li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+    <div>
+        <h1 class="text-2xl font-bold text-phillies-blue">{{ year }} products</h1>
+        <p class="text-sm text-base-content/60 mt-1">{{ rows|length }} set groups</p>
+    </div>
+    <a href="/year/{{ year }}" class="btn btn-sm btn-outline">View year page</a>
+</div>
+
+<div class="overflow-x-auto bg-base-100 border border-base-200 rounded-lg">
+    <table class="table table-sm">
+        <thead>
+            <tr class="bg-base-200">
+                <th>Display name</th>
+                <th>Category</th>
+                <th>Auto category</th>
+                <th>Progress</th>
+                <th>Flags</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr class="{% if row.hidden %}opacity-60{% endif %}">
+                <td class="font-medium">{{ row.display_name }}</td>
+                <td>{{ row.category_label }}</td>
+                <td class="text-base-content/60">{{ row.auto_category_label }}</td>
+                <td>{{ row.group.group_owned }}/{{ row.group.group_total }}</td>
+                <td>
+                    {% if row.hidden %}<span class="badge badge-ghost badge-sm">hidden</span>{% endif %}
+                    {% if row.group.base_set.category_source == 'manual' %}<span class="badge badge-outline badge-sm">cat lock</span>{% endif %}
+                </td>
+                <td class="text-right">
+                    <a href="/admin/year/{{ year }}/set/{{ row.group.base_set.id }}" class="btn btn-xs btn-primary">Edit</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

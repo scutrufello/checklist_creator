@@ -38,13 +38,36 @@ class CardSet(Base):
     canonical_parent_set_id = Column(Integer, ForeignKey("card_sets.id"), nullable=True, index=True)
     relationship_type = Column(String, nullable=True, index=True)  # base, insert, parallel, variation, standalone
     relationship_confidence = Column(Float, nullable=True)
+    # Admin / year-page overrides
+    year_list_category = Column(String, nullable=True, index=True)
+    display_name_override = Column(String, nullable=True)
+    is_hidden = Column(Boolean, default=False, nullable=False)
+    sort_order = Column(Integer, nullable=True)
+    counts_toward_completion = Column(Boolean, default=True, nullable=False)
+    admin_notes = Column(Text, nullable=True)
+    category_source = Column(String, nullable=False, default="auto")  # auto | manual
+    relationship_source = Column(String, nullable=False, default="auto")  # auto | manual
+    completion_source = Column(String, nullable=False, default="auto")  # auto | manual
 
     parent = relationship("CardSet", remote_side=[id], foreign_keys=[parent_id], backref="children")
     canonical_parent = relationship("CardSet", remote_side=[id], foreign_keys=[canonical_parent_set_id])
     cards = relationship("Card", back_populates="card_set", order_by="Card.sort_number, Card.number, Card.variant")
 
     @property
+    def product_tile_name(self):
+        """Year-page product label: base_name when the structural root is an insert anchor."""
+        override = getattr(self, "display_name_override", None)
+        if override and str(override).strip():
+            return str(override).strip()
+        if self.variant_name:
+            return self.base_name
+        return self.full_name
+
+    @property
     def display_name(self):
+        override = getattr(self, "display_name_override", None)
+        if override and str(override).strip():
+            return str(override).strip()
         if self.variant_name:
             return self.variant_name
         return self.full_name
@@ -53,6 +76,11 @@ class CardSet(Base):
     def url_slug(self):
         slug = re.sub(r"[^a-z0-9]+", "-", self.full_name.lower()).strip("-")
         return slug or f"set-{self.id}"
+
+    @property
+    def tcdb_set_url(self) -> str:
+        slug = re.sub(r"[^a-zA-Z0-9]+", "-", self.full_name).strip("-") or f"set-{self.id}"
+        return f"https://www.tcdb.com/ViewSet.cfm/sid/{self.tcdb_sid}/{slug}"
 
     @property
     def total_cards(self):
@@ -84,6 +112,8 @@ class Card(Base):
     raw_tags_text = Column(String, nullable=True)
     tags = Column(Text, nullable=True)  # JSON array stored as text
     owned = Column(Boolean, default=False, nullable=False)
+    # If False, card still shows in checklist but is omitted from completion % (e.g. cosmetic print variants).
+    counts_toward_completion = Column(Boolean, default=True, nullable=False)
 
     card_set = relationship("CardSet", back_populates="cards")
 

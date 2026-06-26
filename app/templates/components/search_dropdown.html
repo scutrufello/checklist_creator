@@ -1,0 +1,28 @@
+{% if query|length >= 2 %}
+{% if results %}
+<div class="bg-base-100 rounded-box shadow-xl border border-base-200 w-[min(100vw-2rem,22rem)] max-h-80 overflow-hidden flex flex-col">
+    <ul class="menu menu-sm p-2 gap-0 overflow-y-auto flex-1">
+        {% for card, cs in results %}
+        <li>
+            <a href="/set/{{ cs.id }}/{{ cs.url_slug }}#card-{{ card.id }}"
+               class="whitespace-normal h-auto min-h-0 py-2 rounded-lg hover:bg-base-200">
+                <div class="flex flex-col gap-0.5 min-w-0 text-left w-full">
+                    <span class="font-medium text-phillies-blue leading-tight">{{ card.player_name }}</span>
+                    <span class="text-xs text-base-content/60 leading-snug line-clamp-2">
+                        {{ cs.year }} · {{ cs.full_name }} · #{{ card.number }}{% if card.variant_display %} · {{ card.variant_display }}{% endif %}
+                    </span>
+                </div>
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+    <div class="px-3 py-2 text-xs border-t border-base-200 bg-base-200/40 shrink-0">
+        <a href="{{ search_url }}" class="link link-primary font-medium">See all results</a>
+    </div>
+</div>
+{% else %}
+<div class="bg-base-100 rounded-box shadow-xl border border-base-200 p-4 text-sm text-base-content/60 w-[min(100vw-2rem,22rem)]">
+    No matches for “{{ query }}”.
+</div>
+{% endif %}
+{% endif %}

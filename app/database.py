@@ -36,6 +36,7 @@ def init_db():
     engine = get_engine()
     Base.metadata.create_all(engine)
     _ensure_card_set_columns()
+    _ensure_card_columns()
     _ensure_cards_indexes()
 
 
@@ -58,6 +59,25 @@ def _ensure_card_set_columns():
     if "relationship_confidence" not in existing_columns:
         cur.execute("ALTER TABLE card_sets ADD COLUMN relationship_confidence FLOAT")
 
+    admin_columns = {
+        "year_list_category": "VARCHAR",
+        "display_name_override": "VARCHAR",
+        "is_hidden": "BOOLEAN NOT NULL DEFAULT 0",
+        "sort_order": "INTEGER",
+        "counts_toward_completion": "BOOLEAN NOT NULL DEFAULT 1",
+        "admin_notes": "TEXT",
+        "category_source": "VARCHAR NOT NULL DEFAULT 'auto'",
+        "relationship_source": "VARCHAR NOT NULL DEFAULT 'auto'",
+        "completion_source": "VARCHAR NOT NULL DEFAULT 'auto'",
+    }
+    for col, ddl in admin_columns.items():
+        if col not in existing_columns:
+            cur.execute(f"ALTER TABLE card_sets ADD COLUMN {col} {ddl}")
+
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS ix_card_sets_year_list_category "
+        "ON card_sets(year_list_category)"
+    )
     cur.execute(
         "CREATE INDEX IF NOT EXISTS ix_card_sets_canonical_parent_set_id "
         "ON card_sets(canonical_parent_set_id)"
@@ -66,6 +86,27 @@ def _ensure_card_set_columns():
         "CREATE INDEX IF NOT EXISTS ix_card_sets_relationship_type "
         "ON card_sets(relationship_type)"
     )
+    conn.commit()
+    conn.close()
+
+
+def _ensure_card_columns():
+    """Lightweight SQLite migration for checklist completion rules."""
+    config = load_config()
+    db_path = config["storage"]["db_path"]
+    if not os.path.isabs(db_path):
+        db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), db_path)
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(cards)")
+    existing_columns = {row[1] for row in cur.fetchall()}
+
+    if "counts_toward_completion" not in existing_columns:
+        cur.execute(
+            "ALTER TABLE cards ADD COLUMN counts_toward_completion BOOLEAN NOT NULL DEFAULT 1"
+        )
+
     conn.commit()
     conn.close()
 

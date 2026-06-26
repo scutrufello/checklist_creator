@@ -19,7 +19,7 @@
     </p>
 </div>
 
-<form method="get" action="/admin/relationships" class="bg-white border border-base-200 rounded-lg p-4 mb-4 flex flex-wrap gap-3 items-end">
+<form method="get" action="/admin/relationships" class="bg-base-100 border border-base-200 rounded-lg p-4 mb-4 flex flex-wrap gap-3 items-end">
     <label class="form-control">
         <span class="label-text text-xs">Year (optional)</span>
         <input type="number" name="year" value="{{ year if year is not none else '' }}" class="input input-sm input-bordered w-28">
@@ -41,7 +41,7 @@
 
 <div class="space-y-3">
     {% for row in reviews %}
-    <form method="post" action="/admin/relationships/update" class="bg-white border border-base-200 rounded-lg p-4">
+    <form method="post" action="/admin/relationships/update" class="bg-base-100 border border-base-200 rounded-lg p-4">
         <input type="hidden" name="set_id" value="{{ row.set.id }}">
         <input type="hidden" name="year" value="{{ year if year is not none else '' }}">
         <input type="hidden" name="max_conf" value="{{ max_conf }}">

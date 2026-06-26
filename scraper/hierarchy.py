@@ -184,6 +184,145 @@ def split_set_name(full_name: str) -> tuple[str, str | None]:
     return full_name, None
 
 
+# Small relic/patch/book subsets should never anchor a whole product family on the year page.
+_UNLIKELY_ROOT_VARIANT_RE = re.compile(
+    r"(?i)^(?:"
+    r"mlb logo patch|"
+    r"definitive mlb logo patch|"
+    r"dual mlb logo patch book|"
+    r"triple mlb logo patch book|"
+    r"quad patch collection|"
+    r"trio autographs|"
+    r"city connect slogan autograph book"
+    r")$"
+)
+
+_COLOR_INSERT_SUFFIXES = (
+    " Black", " Gold", " Red", " Orange", " Pink", " Platinum", " Bronze",
+)
+
+# When TCDB has no variant-less product row (common on premium hit-only releases),
+# prefer these insert anchors before generic fallback.
+_PREFERRED_ROOT_BY_BASE: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
+    (
+        re.compile(r"definitive collection", re.I),
+        (
+            "Definitive Autograph Relic",
+            "Autograph Relic Collection",
+            "Base Autograph Relic Collection",
+            "Jumbo Relic Collection",
+        ),
+    ),
+)
+
+
+def _unlikely_product_root(variant_name: str | None) -> bool:
+    if not variant_name:
+        return False
+    return bool(_UNLIKELY_ROOT_VARIANT_RE.match(variant_name.strip()))
+
+
+def _is_color_parallel_insert(variant_name: str | None, variant_names: set[str]) -> bool:
+    """Gold/Black/Red/etc. insert lines that duplicate a base insert name."""
+    if not variant_name:
+        return False
+    for suffix in _COLOR_INSERT_SUFFIXES:
+        if variant_name.endswith(suffix):
+            base = variant_name[: -len(suffix)]
+            if base in variant_names:
+                return True
+    return False
+
+
+def _preferred_product_root(group_sets: list[CardSet]) -> CardSet | None:
+    if not group_sets:
+        return None
+    base_name = group_sets[0].base_name
+    by_variant = {s.variant_name: s for s in group_sets if s.variant_name}
+    for pattern, preferred in _PREFERRED_ROOT_BY_BASE:
+        if not pattern.search(base_name):
+            continue
+        for name in preferred:
+            match = by_variant.get(name)
+            if match is not None:
+                return match
+    return None
+
+
+def _insert_root_candidates(group_sets: list[CardSet]) -> list[CardSet]:
+    variant_names = {s.variant_name for s in group_sets if s.variant_name}
+    return [
+        s for s in group_sets
+        if classify_set_type(s.full_name, s.base_name, s.variant_name) == "insert"
+        and not _unlikely_product_root(s.variant_name)
+        and not _is_color_parallel_insert(s.variant_name, variant_names)
+    ]
+
+
+def pick_product_root(group_sets: list[CardSet]) -> CardSet:
+    """
+    Choose the checklist tile root for a TCDB product family (shared ``base_name``).
+
+    Prefer the row with no ``variant_name`` (e.g. ``2026 Topps``). For insert-only premium
+    products, prefer a foundation insert (e.g. Definitive Autograph Relic) over short patch
+    subsets like ``MLB Logo Patch``.
+    """
+    if not group_sets:
+        raise ValueError("pick_product_root requires at least one CardSet")
+    if len(group_sets) == 1:
+        return group_sets[0]
+
+    roots = [s for s in group_sets if s.variant_name is None]
+    if roots:
+        return min(roots, key=lambda s: s.tcdb_sid)
+
+    exact_base = [s for s in group_sets if s.full_name == s.base_name]
+    if exact_base:
+        return min(exact_base, key=lambda s: s.tcdb_sid)
+
+    preferred = _preferred_product_root(group_sets)
+    if preferred is not None:
+        return preferred
+
+    insert_anchors = _insert_root_candidates(group_sets)
+    if insert_anchors:
+        return min(
+            insert_anchors,
+            key=lambda s: (-len(s.variant_name or ""), s.tcdb_sid),
+        )
+
+    return min(group_sets, key=lambda s: s.tcdb_sid)
+
+
+def sync_parent_ids_by_base_name(session: Session, year: int | None = None) -> int:
+    """
+    Link ``parent_id`` from shared ``base_name`` without touching relationship fields or
+    ``set_type``. Safe to run after parallel resolution or incremental scrapes.
+    """
+    query = session.query(CardSet)
+    if year is not None:
+        query = query.filter(CardSet.year == year)
+
+    sets = query.all()
+    groups: dict[tuple[int, str], list[CardSet]] = defaultdict(list)
+    for s in sets:
+        groups[(s.year, s.base_name)].append(s)
+
+    updated = 0
+    for group_sets in groups.values():
+        root = pick_product_root(group_sets)
+        for s in group_sets:
+            want_parent = None if s.id == root.id else root.id
+            if s.parent_id != want_parent:
+                s.parent_id = want_parent
+                updated += 1
+
+    if updated:
+        session.commit()
+        logger.info("Synced parent_id for %d card sets", updated)
+    return updated
+
+
 def build_hierarchy(session: Session, year: int | None = None):
     """
     After cards are scraped, link parallel/insert sets to their parent base set.
@@ -205,34 +344,13 @@ def build_hierarchy(session: Session, year: int | None = None):
         if len(group_sets) <= 1:
             continue
 
-        # True product base: stored with no variant_name (e.g. "2026 Topps").
-        # Do not use set_type == 'base' here — it can be stale and match a parallel row first.
-        base_set = None
-        for s in group_sets:
-            if s.variant_name is None:
-                base_set = s
-                break
-
-        # If still no base, prefer a true "insert" anchor (shortest variant_name first),
-        # so TCDB sid ordering does not promote a parallel row (e.g. Leaf) to group root.
-        if base_set is None:
-            insert_anchors = [
-                s for s in group_sets
-                if classify_set_type(s.full_name, s.base_name, s.variant_name) == "insert"
-            ]
-            if insert_anchors:
-                base_set = min(
-                    insert_anchors,
-                    key=lambda s: (len(s.variant_name or ""), s.tcdb_sid),
-                )
-            else:
-                base_set = min(group_sets, key=lambda s: s.tcdb_sid)
+        base_set = pick_product_root(group_sets)
+        if base_set.variant_name is not None:
             base_set.set_type = "base"
 
         base_set.set_type = "base"
         base_set.parent_id = None
 
-        # Link children to parent
         for s in group_sets:
             if s.id == base_set.id:
                 continue

@@ -11,7 +11,7 @@
 {% if years %}
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
     {% for y in years %}
-    <a href="/year/{{ y.year }}" class="card bg-white shadow-md hover:shadow-xl transition-shadow border border-base-200 hover:border-phillies-red/30">
+    <a href="/year/{{ y.year }}" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow border border-base-200 hover:border-phillies-red/30">
         <div class="card-body p-5">
             <div class="flex items-center justify-between">
                 <h2 class="card-title text-2xl font-bold text-phillies-blue">{{ y.year }}</h2>

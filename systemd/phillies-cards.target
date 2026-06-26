@@ -1,0 +1,9 @@
+[Unit]
+Description=Phillies checklist — web UI and scheduled TCDB refresh
+Documentation=file:///home/scutrufello/phillies-cards/systemd/README.md
+# Convenience group: `systemctl start phillies-cards.target` starts the web app
+# and ensures the scrape timer is active (units must be enabled; see install.sh).
+Wants=phillies-checklist-web.service phillies-tcdb-recent-scrape.timer
+
+[Install]
+WantedBy=multi-user.target

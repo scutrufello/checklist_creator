@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Search{% if query %} — {{ query }}{% endif %} - Phillies Cards{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumbs text-sm mb-4">
+    <ul>
+        <li><a href="/" class="text-phillies-blue hover:text-phillies-red">Home</a></li>
+        <li class="font-semibold">Search</li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-xl sm:text-2xl font-bold text-phillies-blue mb-4">Search checklist</h1>
+    <form action="/search" method="get" class="flex flex-col sm:flex-row gap-2 max-w-xl">
+        <input type="search" name="q" value="{{ query }}"
+               placeholder="Player, set, year, number, variation…"
+               class="input input-bordered flex-1 bg-base-100"
+               autofocus
+               minlength="2" />
+        <button type="submit" class="btn bg-phillies-blue text-white border-0 hover:bg-phillies-blue/90">Search</button>
+    </form>
+    <p class="text-xs text-base-content/50 mt-2">Type at least 2 characters. Matches player name, card #, variation text, or set name (4-digit year matches release year).</p>
+</div>
+
+{% if query and query|length < 2 %}
+<div class="alert alert-warning shadow-sm">
+    <span>Enter at least 2 characters to search.</span>
+</div>
+{% elif query and query|length >= 2 %}
+{% if results %}
+<p class="text-sm text-base-content/70 mb-3">{{ results|length }} match{% if results|length != 1 %}es{% endif %}{% if results|length >= 200 %} (showing first 200){% endif %}</p>
+<div class="overflow-x-auto rounded-lg border border-base-200 bg-base-100 shadow-sm">
+    <table class="table table-sm table-zebra">
+        <thead class="bg-phillies-blue text-white">
+            <tr>
+                <th class="w-14">Year</th>
+                <th>Set</th>
+                <th class="w-20">#</th>
+                <th>Player</th>
+                <th class="hidden md:table-cell w-28">Tags</th>
+                <th class="w-16 text-center">Own</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for card, cs in results %}
+            <tr class="hover">
+                <td class="whitespace-nowrap">{{ cs.year }}</td>
+                <td class="min-w-[10rem]">
+                    <a href="/set/{{ cs.id }}/{{ cs.url_slug }}#card-{{ card.id }}" class="link link-hover text-phillies-blue">{{ cs.full_name }}</a>
+                </td>
+                <td class="font-mono text-sm">{{ card.number }}</td>
+                <td>
+                    <span class="font-medium">{{ card.player_name }}</span>
+                    {% if card.variant_display %}
+                    <div class="text-xs text-base-content/60 mt-0.5">{{ card.variant_display }}</div>
+                    {% endif %}
+                </td>
+                <td class="hidden md:table-cell">
+                    {% if card.tags_list %}
+                    <div class="flex flex-wrap gap-1">
+                        {% for tag in card.tags_list %}
+                        <span class="badge badge-xs badge-outline">{{ tag }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </td>
+                <td class="text-center">
+                    {% if card.owned %}
+                    <span class="badge badge-success badge-sm">Yes</span>
+                    {% else %}
+                    <span class="text-base-content/40">—</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="text-center py-12 text-base-content/50">
+    <p>No cards found for “{{ query }}”.</p>
+</div>
+{% endif %}
+{% else %}
+<div class="text-center py-12 text-base-content/50">
+    <p>Use the search box above to find cards across all years.</p>
+</div>
+{% endif %}
+{% endblock %}

@@ -17,13 +17,21 @@
 
 {% block content %}
 <div class="mb-6">
-    <h1 class="text-xl sm:text-2xl font-bold text-phillies-blue mb-1">{{ card_set.full_name }}</h1>
-    <div class="flex flex-wrap items-center gap-3 text-sm text-base-content/60">
-        <span class="badge badge-outline">{{ card_set.relationship_type or card_set.set_type }}</span>
-        <span id="set-counter">{{ owned }}/{{ total }} collected</span>
-        {% if total > 0 %}
-        <span>({{ (owned / total * 100)|round(1) }}%)</span>
-        {% endif %}
+    <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+            <h1 class="text-xl sm:text-2xl font-bold text-phillies-blue mb-1">{{ card_set.full_name }}</h1>
+            <div class="flex flex-wrap items-center gap-3 text-sm text-base-content/60">
+                <span class="badge badge-outline">{{ card_set.relationship_type or card_set.set_type }}</span>
+                <span id="set-counter">{{ owned }}/{{ total }} collected</span>
+                {% if total > 0 %}
+                <span>({{ (owned / total * 100)|round(1) }}%)</span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="{{ card_set.tcdb_set_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-xs btn-ghost">TCDB</a>
+            <a href="/admin/year/{{ card_set.year }}/set/{{ card_set.id }}" class="btn btn-xs btn-ghost">Admin</a>
+        </div>
     </div>
 
     {% if total > 0 %}

@@ -1,16 +1,45 @@
 import os
 from collections import defaultdict
 import re
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, Request, Depends, Form
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import func, distinct, case
+from sqlalchemy import and_, func, distinct, case, or_
 from sqlalchemy.orm import Session
 
 from app.database import get_session, init_db
 from app.models import Card, CardSet
+from app.product_clusters import (
+    attach_parallel_partitions,
+    build_segment_keys,
+    cluster_kind_for_base_name,
+    detect_series_two_split,
+    identify_bowman_prospect_set_ids,
+    parallel_set_ids_in_section_data,
+    pick_cluster_primary_root,
+    pick_cluster_supplemental_roots,
+    pick_topps_now_supplemental_roots,
+    progress_from_sets,
+    segment_for_set,
+    segment_label,
+    serial_denominators_from_card_tags,
+    sets_in_segment,
+    supplemental_base_names_from_roots,
+)
+from app.set_metadata import (
+    CATEGORY_LABEL_BY_KEY,
+    YEAR_LIST_CATEGORIES,
+    auto_year_list_category,
+    auto_year_list_category_label,
+    effective_year_list_category,
+    effective_year_list_category_label,
+    set_is_hidden,
+    year_list_display_name,
+)
+from scraper.hierarchy import pick_product_root
 
 app = FastAPI(title="Phillies Cards Checklist")
 
@@ -27,114 +56,92 @@ def get_db():
         db.close()
 
 
-# Year listing buckets (TCDB-style ordering). Checked top-to-bottom in _year_list_bucket.
-_YEAR_PROMO_TEAM_RE = re.compile(
-    r"(?i)"
-    r"(\bpromo\b|"
-    r"stadium giveaway|"
-    r"team issue|"
-    r"\bteam set\b|"
-    r"kids club|"
-    r"club 215|"
-    r"bobblehead|"
-    r"wrapper redemption|"
-    r"industry conference|"
-    r"\bnscc\b|"
-    r"national sports collectors convention|"
-    r"\bsga\b|"
-    r"rip night|"
-    r"fan appreciation|"
-    r"fan fest|"
-    r"\bfest autograph\b|"
-    r"\bphoto day\b|"
-    r"military appreciation|"
-    r"first pitch|"
-    r"ticket giveaway|"
-    r"luncheon|"
-    r"meet\s+and\s+greet|"
-    r"vip\s+event|"
-    r"photocards?|"
-    r"\bcard show\b)",
-)
-
-_YEAR_MILB_RE = re.compile(
-    r"(?i)"
-    r"\b(milb|minor\s+league|"
-    r"class\s*[ad]\b|single[-\s]?a|double[-\s]?a|triple[-\s]?a|"
-    r"threshers|blueclaws|ironpigs|fightin\b|fightin'? phils|"
-    r"lehigh valley|jersey shore|clearwater|lakewood|"
-    r"clearwater threshers|jersey shore blueclaws|"
-    r"\breading phillies\b|\breading fightin\b|"
-    r"affiliate|"
-    r"rise to the show|"
-    r"\bprospect team\b)",
-)
-
-_YEAR_MAJOR_UNLICENSED_RE = re.compile(
-    r"(?i)"
-    r"\(unlicensed\)|"
-    r"\bpanini\b|\bdonruss\b|\bleaf\b|\bonyx\b|\bsage\b|\bchoice\b|"
-    r"\bwild card\b|historic autographs|\bpress pass\b|\bfutera\b|\brazor\b|"
-    r"\btristar\b",
-)
-
-_YEAR_MAJOR_LICENSED_RE = re.compile(
-    r"(?i)"
-    r"\b("
-    r"topps|bowman|bowman'?s|stadium club|upper deck|\bfleer\b|\bscore\b|"
-    r"finest|heritage|archives|gypsy queen|big league|pro debut|"
-    r"museum collection|tribute|tier one|sterling|five star|diamond icons|"
-    r"gilded|pristine|dynasty|lucent|black.?white|brooklyn collection|"
-    r"chrome|cosmic chrome|"
-    r"allen\s*&\s*ginter|allen.{0,5}ginter"
-    r")\b",
-)
-
-_YEAR_SECTION_LABELS = (
-    "Major licensed releases",
-    "Major unlicensed releases",
-    "Minor league",
-    "Oddball & regional",
-    "Promos, giveaways & team issues",
-)
-
-
-def _year_list_bucket(card_set: CardSet) -> int:
-    """
-    Rough TCDB-like grouping for the year index. Order:
-    0 major licensed, 1 major unlicensed, 2 minors, 3 oddball, 4 promo/team.
-    """
-    text = f"{card_set.full_name} {card_set.base_name}"
-    if _YEAR_PROMO_TEAM_RE.search(text):
-        return 4
-    if _YEAR_MILB_RE.search(text):
-        return 2
-    if _YEAR_MAJOR_UNLICENSED_RE.search(text):
-        return 1
-    if _YEAR_MAJOR_LICENSED_RE.search(text):
-        return 0
-    return 3
-
 
 def _organize_year_list_sections(set_groups: list[dict]) -> list[dict]:
-    """Split year groups into ordered sections with stable in-section sorting."""
-    buckets: dict[int, list[dict]] = defaultdict(list)
+    """Split year groups into taxonomy sections (admin overrides respected)."""
+    buckets: dict[str, list[dict]] = defaultdict(list)
     for g in set_groups:
-        buckets[_year_list_bucket(g["base_set"])].append(g)
+        buckets[effective_year_list_category(g["base_set"])].append(g)
 
     sections: list[dict] = []
-    for i, label in enumerate(_YEAR_SECTION_LABELS):
-        groups = buckets.get(i, [])
+    for key, label in YEAR_LIST_CATEGORIES:
+        groups = buckets.get(key, [])
         if not groups:
             continue
-        groups.sort(key=lambda x: x["base_set"].full_name.lower())
-        sections.append({"label": label, "groups": groups})
+        groups.sort(
+            key=lambda x: (
+                x["base_set"].sort_order
+                if x["base_set"].sort_order is not None
+                else 9999,
+                year_list_display_name(x["base_set"]).lower(),
+            ),
+        )
+        sections.append({"key": key, "label": label, "groups": groups})
     return sections
+
+
+def _completion_card_filter():
+    """Cards count only when both card and set are marked required."""
+    return and_(
+        Card.counts_toward_completion == True,
+        CardSet.counts_toward_completion == True,
+    )
+
+
+def _owned_completion_card_filter():
+    return and_(
+        Card.owned == True,
+        Card.counts_toward_completion == True,
+        CardSet.counts_toward_completion == True,
+    )
 
 
 @app.on_event("startup")
 def startup():
     init_db()
+
+
+def _search_like_pattern(q: str) -> str:
+    """Build a LIKE pattern; strip wildcards from user input to avoid accidental full scans."""
+    q = (q or "").strip()
+    for ch in ("%", "_"):
+        q = q.replace(ch, "")
+    return f"%{q}%" if q else ""
+
+
+def _search_cards(
+    db: Session,
+    q: str,
+    *,
+    limit: int,
+) -> list[tuple[Card, CardSet]]:
+    """Return (Card, CardSet) rows matching player, number, variant, set name, or exact 4-digit year."""
+    raw = (q or "").strip()
+    if len(raw) < 2:
+        return []
+
+    pat = _search_like_pattern(raw)
+    clauses = [
+        Card.player_name.ilike(pat),
+        Card.number.ilike(pat),
+        Card.variant.ilike(pat),
+        CardSet.full_name.ilike(pat),
+        CardSet.base_name.ilike(pat),
+    ]
+    if raw.isdigit() and len(raw) == 4:
+        y = int(raw)
+        if 1800 <= y <= 2100:
+            clauses.append(CardSet.year == y)
+
+    rows = (
+        db.query(Card, CardSet)
+        .join(CardSet, Card.set_id == CardSet.id)
+        .filter(or_(*clauses))
+        .order_by(CardSet.year.desc(), CardSet.full_name, Card.sort_number, Card.number, Card.variant)
+        .limit(limit)
+        .all()
+    )
+    return rows
 
 
 def _build_year_set_groups(db: Session, year: int) -> list[dict]:
@@ -146,17 +153,17 @@ def _build_year_set_groups(db: Session, year: int) -> list[dict]:
         .all()
     )
 
-    base_sets = [s for s in all_sets if s.parent_id is None]
-    children_by_parent_id: dict[int, list[CardSet]] = defaultdict(list)
+    # Group by TCDB product family (base_name), not parent_id — incremental scrapes often
+    # leave parent_id null on new variant rows until hierarchy sync runs.
+    by_base_name: dict[str, list[CardSet]] = defaultdict(list)
     for s in all_sets:
-        if s.parent_id is not None:
-            children_by_parent_id[s.parent_id].append(s)
+        by_base_name[s.base_name].append(s)
 
     set_stats_rows = (
         db.query(
             Card.set_id,
-            func.count(Card.id).label("total"),
-            func.sum(case((Card.owned == True, 1), else_=0)).label("owned"),
+            func.sum(case((_completion_card_filter(), 1), else_=0)).label("total"),
+            func.sum(case((_owned_completion_card_filter(), 1), else_=0)).label("owned"),
         )
         .join(CardSet, Card.set_id == CardSet.id)
         .filter(CardSet.year == year)
@@ -169,29 +176,41 @@ def _build_year_set_groups(db: Session, year: int) -> list[dict]:
     }
 
     set_groups = []
-    for bs in base_sets:
-        children = children_by_parent_id.get(bs.id, [])
+    clustered_kinds: dict[str, list[CardSet]] = defaultdict(list)
+    standalone_groups: list[tuple[str, list[CardSet]]] = []
 
+    for base_name, members in by_base_name.items():
+        kind = cluster_kind_for_base_name(base_name)
+        if kind:
+            clustered_kinds[kind].extend(members)
+        else:
+            standalone_groups.append((base_name, members))
+
+    def _append_group(
+        bs: CardSet,
+        members: list[CardSet],
+        *,
+        cluster_kind: str | None,
+        supplemental_roots: dict[str, CardSet | None] | None,
+        supplemental_labels: dict[str, str] | None = None,
+    ) -> None:
+        children = sorted(
+            (s for s in members if s.id != bs.id),
+            key=lambda s: (s.full_name or "").lower(),
+        )
         base_stats = stats_by_set_id.get(bs.id, {"total": 0, "owned": 0})
         base_total = base_stats["total"]
         base_owned = base_stats["owned"]
-
         child_data = []
         group_total = base_total
         group_owned = base_owned
-
         for child in children:
             child_stats = stats_by_set_id.get(child.id, {"total": 0, "owned": 0})
             ct = child_stats["total"]
             co = child_stats["owned"]
             group_total += ct
             group_owned += co
-            child_data.append({
-                "set": child,
-                "total": ct,
-                "owned": co,
-            })
-
+            child_data.append({"set": child, "total": ct, "owned": co})
         set_groups.append({
             "base_set": bs,
             "base_total": base_total,
@@ -199,9 +218,188 @@ def _build_year_set_groups(db: Session, year: int) -> list[dict]:
             "children": child_data,
             "group_total": group_total,
             "group_owned": group_owned,
+            "cluster_kind": cluster_kind,
+            "supplemental_roots": supplemental_roots or {},
+            "supplemental_labels": supplemental_labels or {},
+            "update_base_set": (supplemental_roots or {}).get("update"),
         })
 
+    for kind, members in clustered_kinds.items():
+        try:
+            bs = pick_cluster_primary_root(members, kind)
+        except ValueError:
+            continue
+        if kind == "topps_now":
+            supplemental_roots, supplemental_labels = pick_topps_now_supplemental_roots(members)
+        else:
+            supplemental_roots = pick_cluster_supplemental_roots(members, kind)
+            supplemental_labels = {}
+        _append_group(
+            bs,
+            members,
+            cluster_kind=kind,
+            supplemental_roots=supplemental_roots,
+            supplemental_labels=supplemental_labels,
+        )
+
+    for base_name, members in sorted(standalone_groups, key=lambda x: x[0].lower()):
+        bs = pick_product_root(members)
+        _append_group(bs, members, cluster_kind=None, supplemental_roots=None, supplemental_labels={})
+
+    set_groups.sort(key=lambda g: (g["base_set"].full_name or "").lower())
     return set_groups
+
+
+def _find_year_group(set_groups: list[dict], base_set_id: int) -> dict | None:
+    for group in set_groups:
+        if group["base_set"].id == base_set_id:
+            return group
+        for supplemental in (group.get("supplemental_roots") or {}).values():
+            if supplemental and supplemental.id == base_set_id:
+                return group
+        update_base = group.get("update_base_set")
+        if update_base and update_base.id == base_set_id:
+            return group
+    return None
+
+
+def _group_stats_by_set_id(db: Session, group: dict) -> dict[int, dict[str, int]]:
+    set_ids = {group["base_set"].id, *(c["set"].id for c in group["children"])}
+    for supplemental in (group.get("supplemental_roots") or {}).values():
+        if supplemental:
+            set_ids.add(supplemental.id)
+    rows = (
+        db.query(
+            Card.set_id,
+            func.sum(case((_completion_card_filter(), 1), else_=0)).label("total"),
+            func.sum(case((_owned_completion_card_filter(), 1), else_=0)).label("owned"),
+        )
+        .join(CardSet, Card.set_id == CardSet.id)
+        .filter(Card.set_id.in_(set_ids))
+        .group_by(Card.set_id)
+        .all()
+    )
+    return {row.set_id: {"total": row.total or 0, "owned": row.owned or 0} for row in rows}
+
+
+def _build_cluster_layout(db: Session, group: dict) -> tuple[dict, list[dict]]:
+    """Master + sub-release progress and per-segment checklist sections."""
+    stats_by_set_id = _group_stats_by_set_id(db, group)
+    all_sets = [group["base_set"], *(c["set"] for c in group["children"])]
+    members_by_id = {s.id: s for s in all_sets}
+    all_ids = set(members_by_id.keys())
+
+    supplemental_roots = group.get("supplemental_roots") or {}
+    if not supplemental_roots and group.get("update_base_set"):
+        supplemental_roots = {"update": group["update_base_set"]}
+    supplemental_labels = group.get("supplemental_labels") or {}
+    supplemental_base_names = supplemental_base_names_from_roots(supplemental_roots)
+    supplemental_base_name_values = set(supplemental_base_names.values())
+    cluster_kind = group.get("cluster_kind")
+    base_set_id = group["base_set"].id
+
+    prospect_set_ids: set[int] | None = None
+    if cluster_kind == "bowman_paper":
+        prospect_set_ids = identify_bowman_prospect_set_ids(db, all_sets)
+
+    flagship_members = [s for s in all_sets if s.base_name not in supplemental_base_name_values]
+    split_series_two = detect_series_two_split(flagship_members) if cluster_kind != "bowman_paper" else False
+    segment_keys = build_segment_keys(
+        supplemental_base_names,
+        split_series_two=split_series_two,
+        cluster_kind=cluster_kind,
+        supplemental_labels=supplemental_labels,
+    )
+
+    sub_bars: list[dict] = []
+    cluster_flagship_labels = {
+        "fleer_paper": "Fleer",
+        "fleer_tradition": "Fleer Tradition",
+        "score_paper": "Score",
+        "donruss_paper": "Donruss",
+        "upper_deck_paper": "Upper Deck",
+        "ultra_paper": "Ultra",
+        "select_paper": "Select",
+    }
+    for key in segment_keys:
+        seg_ids = sets_in_segment(
+            all_ids,
+            members_by_id,
+            stats_by_set_id,
+            supplemental_base_names=supplemental_base_names,
+            split_series_two=split_series_two,
+            segment_key=key,
+            cluster_kind=cluster_kind,
+            prospect_set_ids=prospect_set_ids,
+            base_set_id=base_set_id,
+        )
+        prog = progress_from_sets(seg_ids, stats_by_set_id)
+        label = supplemental_labels.get(key) or segment_label(key)
+        if cluster_kind == "topps_now" and key == "flagship":
+            label = "Topps NOW"
+        if cluster_kind == "topps_big_league" and key == "flagship":
+            label = "Big League"
+        if key == "flagship" and cluster_kind in cluster_flagship_labels:
+            label = cluster_flagship_labels[cluster_kind]
+        sub_bars.append({
+            "key": key,
+            "label": label,
+            **prog,
+        })
+
+    cluster_progress = {
+        "owned": sum(b["owned"] for b in sub_bars),
+        "total": sum(b["total"] for b in sub_bars),
+        "sub_bars": sub_bars,
+    }
+
+    segment_blocks: list[dict] = []
+    flagship_base = group["base_set"]
+    for bar in sub_bars:
+        key = bar["key"]
+        supplemental_root = supplemental_roots.get(key)
+        if supplemental_root:
+            seg_base = supplemental_root
+            show_base = True
+        elif key in ("series_1", "flagship", "veterans"):
+            seg_base = flagship_base
+            show_base = True
+        elif key == "prospects":
+            seg_base = flagship_base
+            show_base = False
+        else:
+            seg_base = flagship_base
+            show_base = False
+
+        seg_children = [
+            c for c in group["children"]
+            if segment_for_set(
+                c["set"],
+                supplemental_base_names=supplemental_base_names,
+                split_series_two=split_series_two,
+                cluster_kind=cluster_kind,
+                prospect_set_ids=prospect_set_ids,
+                members_by_id=members_by_id,
+                base_set_id=base_set_id,
+            ) == key
+            and not (show_base and c["set"].id == seg_base.id)
+        ]
+        seg_group = {"base_set": seg_base, "children": seg_children}
+        section_data = _build_group_sections(db, seg_group)
+        base_stats = stats_by_set_id.get(seg_base.id, {"total": 0, "owned": 0}) if show_base else {"total": 0, "owned": 0}
+        segment_blocks.append({
+            "key": key,
+            "label": bar["label"],
+            "owned": bar["owned"],
+            "total": bar["total"],
+            "show_base": show_base,
+            "base_set": seg_base if show_base else None,
+            "base_owned": base_stats["owned"],
+            "base_total": base_stats["total"],
+            "section_data": section_data,
+        })
+
+    return cluster_progress, segment_blocks
 
 
 def _ui_bucket_for_parallel_child(
@@ -304,7 +502,53 @@ def _build_group_sections(db: Session, group: dict) -> dict:
     for section in top_level_sections:
         section["parallels"] = sorted(section["parallels"], key=lambda c: c["set"].full_name)
 
-    return {"base_parallels": base_parallels, "sections": top_level_sections}
+    raw = {"base_parallels": base_parallels, "sections": top_level_sections}
+    serial_by_set_id = serial_denominators_from_card_tags(db, parallel_set_ids_in_section_data(raw))
+    return attach_parallel_partitions(raw, serial_by_set_id)
+
+
+def _normalize_section_data(section_data: dict | None, db: Session | None = None) -> dict | None:
+    """Ensure numbered/unnumbered parallel keys exist (templates require them)."""
+    if section_data is None:
+        return None
+    if "base_parallels_partitioned" in section_data:
+        return section_data
+    serial_by_set_id = (
+        serial_denominators_from_card_tags(db, parallel_set_ids_in_section_data(section_data))
+        if db is not None
+        else {}
+    )
+    return attach_parallel_partitions(section_data, serial_by_set_id)
+
+
+@app.get("/partials/search", response_class=HTMLResponse)
+def search_dropdown(request: Request, q: str = "", db: Session = Depends(get_db)):
+    """HTMX fragment: quick search results for the nav dropdown."""
+    q = (q or "").strip()
+    results: list[tuple[Card, CardSet]] = []
+    if len(q) >= 2:
+        results = _search_cards(db, q, limit=12)
+    search_url = f"/search?{urlencode({'q': q})}" if q else "/search"
+    return templates.TemplateResponse("components/search_dropdown.html", {
+        "request": request,
+        "query": q,
+        "results": results,
+        "search_url": search_url,
+    })
+
+
+@app.get("/search", response_class=HTMLResponse)
+def search_page(request: Request, q: str = "", db: Session = Depends(get_db)):
+    """Full search results page (linked from the nav dropdown)."""
+    q = (q or "").strip()
+    results: list[tuple[Card, CardSet]] = []
+    if len(q) >= 2:
+        results = _search_cards(db, q, limit=200)
+    return templates.TemplateResponse("search.html", {
+        "request": request,
+        "query": q,
+        "results": results,
+    })
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -336,16 +580,32 @@ def index(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/year/{year}", response_class=HTMLResponse)
-def year_view(request: Request, year: int, db: Session = Depends(get_db)):
+def year_view(
+    request: Request,
+    year: int,
+    show_hidden: bool = False,
+    db: Session = Depends(get_db),
+):
     """Show grouped sets for a year (one row per set group)."""
     set_groups = _build_year_set_groups(db, year)
-    year_sections = _organize_year_list_sections(set_groups)
+    hidden_count = sum(1 for g in set_groups if set_is_hidden(g["base_set"]))
+    visible_groups = [
+        g for g in set_groups
+        if show_hidden or not set_is_hidden(g["base_set"])
+    ]
+    year_sections = _organize_year_list_sections(visible_groups)
+    year_owned = sum(g["group_owned"] for g in visible_groups)
+    year_total = sum(g["group_total"] for g in visible_groups)
 
     return templates.TemplateResponse("year.html", {
         "request": request,
         "year": year,
-        "set_groups": set_groups,
+        "set_groups": visible_groups,
         "year_sections": year_sections,
+        "show_hidden": show_hidden,
+        "hidden_count": hidden_count,
+        "year_owned": year_owned,
+        "year_total": year_total,
     })
 
 
@@ -353,11 +613,12 @@ def year_view(request: Request, year: int, db: Session = Depends(get_db)):
 def year_group_view_redirect(year: int, base_set_id: int, db: Session = Depends(get_db)):
     """Redirect legacy year group URL to slugged canonical URL."""
     set_groups = _build_year_set_groups(db, year)
-    group = next((g for g in set_groups if g["base_set"].id == base_set_id), None)
+    group = _find_year_group(set_groups, base_set_id)
     if group is None:
         return HTMLResponse("Set group not found", status_code=404)
+    canonical_id = group["base_set"].id
     return RedirectResponse(
-        url=f"/year/{year}/group/{base_set_id}/{group['base_set'].url_slug}",
+        url=f"/year/{year}/group/{canonical_id}/{group['base_set'].url_slug}",
         status_code=307,
     )
 
@@ -372,14 +633,15 @@ def year_group_view(
 ):
     """Show one set group page (base set + variants) for a year."""
     set_groups = _build_year_set_groups(db, year)
-    group = next((g for g in set_groups if g["base_set"].id == base_set_id), None)
+    group = _find_year_group(set_groups, base_set_id)
     if group is None:
         return HTMLResponse("Set group not found", status_code=404)
 
     canonical_slug = group["base_set"].url_slug
-    if group_slug != canonical_slug:
+    canonical_id = group["base_set"].id
+    if base_set_id != canonical_id or group_slug != canonical_slug:
         return RedirectResponse(
-            url=f"/year/{year}/group/{base_set_id}/{canonical_slug}",
+            url=f"/year/{year}/group/{canonical_id}/{canonical_slug}",
             status_code=307,
         )
     if not group["children"]:
@@ -387,13 +649,26 @@ def year_group_view(
             url=f"/set/{group['base_set'].id}/{group['base_set'].url_slug}",
             status_code=307,
         )
-    section_data = _build_group_sections(db, group)
+
+    cluster_progress = None
+    segment_blocks = None
+    section_data = None
+    if group.get("cluster_kind"):
+        cluster_progress, segment_blocks = _build_cluster_layout(db, group)
+        segment_blocks = [
+            {**block, "section_data": _normalize_section_data(block["section_data"], db)}
+            for block in segment_blocks
+        ]
+    else:
+        section_data = _normalize_section_data(_build_group_sections(db, group), db)
 
     return templates.TemplateResponse("year_group.html", {
         "request": request,
         "year": year,
         "group": group,
         "section_data": section_data,
+        "cluster_progress": cluster_progress,
+        "segment_blocks": segment_blocks,
     })
 
 
@@ -468,9 +743,202 @@ def toggle_card(request: Request, card_id: int, db: Session = Depends(get_db)):
 @app.get("/api/stats/{set_id}", response_class=JSONResponse)
 def set_stats(set_id: int, db: Session = Depends(get_db)):
     """Get stats for a set (used for live counter updates)."""
-    total = db.query(func.count(Card.id)).filter(Card.set_id == set_id).scalar() or 0
-    owned = db.query(func.sum(case((Card.owned == True, 1), else_=0))).filter(Card.set_id == set_id).scalar() or 0
+    total = (
+        db.query(func.count(Card.id))
+        .join(CardSet, Card.set_id == CardSet.id)
+        .filter(Card.set_id == set_id, _completion_card_filter())
+        .scalar()
+        or 0
+    )
+    owned = (
+        db.query(func.sum(case((_owned_completion_card_filter(), 1), else_=0)))
+        .join(CardSet, Card.set_id == CardSet.id)
+        .filter(Card.set_id == set_id)
+        .scalar()
+        or 0
+    )
     return {"total": total, "owned": owned}
+
+
+def _admin_group_for_set(db: Session, year: int, set_id: int) -> dict | None:
+    set_groups = _build_year_set_groups(db, year)
+    return _find_year_group(set_groups, set_id)
+
+
+def _admin_parent_options(db: Session, card_set: CardSet) -> list[CardSet]:
+    return (
+        db.query(CardSet)
+        .filter(
+            CardSet.year == card_set.year,
+            CardSet.base_name == card_set.base_name,
+            CardSet.id != card_set.id,
+            CardSet.relationship_type != "parallel",
+        )
+        .order_by(CardSet.full_name)
+        .all()
+    )
+
+
+@app.get("/admin", response_class=HTMLResponse)
+def admin_index(request: Request, db: Session = Depends(get_db)):
+    years = [row[0] for row in db.query(distinct(CardSet.year)).order_by(CardSet.year.desc()).all()]
+    return templates.TemplateResponse("admin_index.html", {"request": request, "years": years})
+
+
+@app.get("/admin/year/{year}", response_class=HTMLResponse)
+def admin_year(request: Request, year: int, db: Session = Depends(get_db)):
+    set_groups = _build_year_set_groups(db, year)
+    rows = []
+    for group in sorted(set_groups, key=lambda g: year_list_display_name(g["base_set"]).lower()):
+        bs = group["base_set"]
+        rows.append({
+            "group": group,
+            "display_name": year_list_display_name(bs),
+            "category_label": effective_year_list_category_label(bs),
+            "auto_category_label": auto_year_list_category_label(bs),
+            "hidden": set_is_hidden(bs),
+        })
+    return templates.TemplateResponse("admin_year.html", {
+        "request": request,
+        "year": year,
+        "rows": rows,
+    })
+
+
+@app.get("/admin/year/{year}/set/{set_id}", response_class=HTMLResponse)
+def admin_set_view(request: Request, year: int, set_id: int, db: Session = Depends(get_db)):
+    card_set = db.query(CardSet).filter_by(id=set_id, year=year).first()
+    if not card_set:
+        return HTMLResponse("Set not found", status_code=404)
+
+    group = _admin_group_for_set(db, year, set_id)
+    product_root = group["base_set"] if group else card_set
+    is_product_root = product_root.id == card_set.id
+
+    tree_rows = []
+    if group and is_product_root:
+        for child in sorted(group["children"], key=lambda c: (c["set"].full_name or "").lower()):
+            cs = child["set"]
+            tree_rows.append({
+                "set": cs,
+                "owned": child["owned"],
+                "total": child["total"],
+                "relationship": cs.relationship_type or cs.set_type,
+            })
+
+    cards = (
+        db.query(Card)
+        .filter(Card.set_id == card_set.id)
+        .order_by(Card.sort_number, Card.number, Card.variant)
+        .limit(500)
+        .all()
+    )
+    parent_options = _admin_parent_options(db, card_set) if not is_product_root else []
+
+    return templates.TemplateResponse("admin_set.html", {
+        "request": request,
+        "year": year,
+        "card_set": card_set,
+        "product_root": product_root,
+        "is_product_root": is_product_root,
+        "group": group,
+        "tree_rows": tree_rows,
+        "cards": cards,
+        "parent_options": parent_options,
+        "categories": YEAR_LIST_CATEGORIES,
+        "auto_category_label": auto_year_list_category_label(product_root),
+        "effective_category_label": effective_year_list_category_label(product_root),
+        "effective_category_key": effective_year_list_category(product_root),
+    })
+
+
+@app.post("/admin/year/{year}/set/{set_id}/update")
+def admin_set_update(
+    year: int,
+    set_id: int,
+    db: Session = Depends(get_db),
+    # Product root fields
+    year_list_category: str = Form(""),
+    category_manual: str = Form(""),
+    display_name_override: str = Form(""),
+    is_hidden: str = Form(""),
+    sort_order: str = Form(""),
+    # Set-level completion
+    counts_toward_completion: str = Form("off"),
+    completion_manual: str = Form(""),
+    cascade_completion_to_cards: str = Form(""),
+    admin_notes: str = Form(""),
+    # Relationship fields (insert/parallel)
+    relationship_type: str = Form(""),
+    parent_id: int = Form(0),
+    relationship_manual: str = Form(""),
+):
+    card_set = db.query(CardSet).filter_by(id=set_id, year=year).first()
+    if not card_set:
+        return HTMLResponse("Set not found", status_code=404)
+
+    group = _admin_group_for_set(db, year, set_id)
+    product_root = group["base_set"] if group else card_set
+    is_product_root = product_root.id == card_set.id
+
+    if is_product_root:
+        auto_category = auto_year_list_category(card_set)
+        chosen_category = year_list_category.strip() if year_list_category else ""
+        wants_manual = (
+            category_manual == "on"
+            or (chosen_category and chosen_category != auto_category)
+        )
+        if wants_manual and chosen_category:
+            card_set.category_source = "manual"
+            card_set.year_list_category = chosen_category
+        else:
+            card_set.category_source = "auto"
+            card_set.year_list_category = None
+        card_set.display_name_override = display_name_override.strip() or None
+        card_set.is_hidden = is_hidden == "on"
+        card_set.sort_order = int(sort_order) if sort_order.strip().isdigit() else None
+
+    card_set.counts_toward_completion = counts_toward_completion == "on"
+    if completion_manual == "on":
+        card_set.completion_source = "manual"
+    else:
+        card_set.completion_source = "auto"
+
+    card_set.admin_notes = admin_notes.strip() or None
+
+    if not is_product_root and relationship_type:
+        card_set.relationship_type = relationship_type
+        card_set.canonical_parent_set_id = None if parent_id == 0 else parent_id
+        if relationship_manual == "on":
+            card_set.relationship_source = "manual"
+            card_set.relationship_confidence = 1.0
+        else:
+            card_set.relationship_source = "auto"
+
+    if cascade_completion_to_cards == "on":
+        db.query(Card).filter(Card.set_id == card_set.id).update(
+            {"counts_toward_completion": card_set.counts_toward_completion},
+            synchronize_session=False,
+        )
+
+    db.commit()
+    return RedirectResponse(url=f"/admin/year/{year}/set/{set_id}", status_code=303)
+
+
+@app.post("/admin/year/{year}/set/{set_id}/card/{card_id}/completion")
+def admin_card_completion(
+    year: int,
+    set_id: int,
+    card_id: int,
+    required: str = Form("on"),
+    db: Session = Depends(get_db),
+):
+    card = db.query(Card).filter_by(id=card_id, set_id=set_id).first()
+    if not card:
+        return HTMLResponse("Card not found", status_code=404)
+    card.counts_toward_completion = required == "on"
+    db.commit()
+    return RedirectResponse(url=f"/admin/year/{year}/set/{set_id}#cards", status_code=303)
 
 
 @app.get("/partials/set/{set_id}/cards", response_class=HTMLResponse)
@@ -559,6 +1027,7 @@ def relationships_update(
     card_set.relationship_type = relationship_type
     card_set.canonical_parent_set_id = None if parent_id == 0 else parent_id
     card_set.relationship_confidence = 1.0
+    card_set.relationship_source = "manual"
     db.commit()
 
     target = f"/admin/relationships?max_conf={max_conf}&limit={limit}"

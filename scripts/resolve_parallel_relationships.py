@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database import init_db, get_session  # noqa: E402
 from app.models import CardSet, Card  # noqa: E402
-from scraper.hierarchy import classify_set_type  # noqa: E402
+from scraper.hierarchy import classify_set_type, sync_parent_ids_by_base_name, pick_product_root  # noqa: E402
 
 
 def norm_text(value: str) -> str:
@@ -514,11 +514,15 @@ def looks_like_variation(card_set: CardSet, cards: list[Card]) -> bool:
 
 
 def resolve_group_relationships(group_sets: list[CardSet], cards_by_set_id: dict[int, list[Card]]):
-    # Pick root base candidate.
-    base_candidates = [s for s in group_sets if s.variant_name is None or s.set_type == "base"]
-    if not base_candidates:
-        base_candidates = group_sets[:]
-    root_base = min(base_candidates, key=lambda s: s.tcdb_sid)
+    by_id = {s.id: s for s in group_sets}
+    manual_snapshots = {
+        s.id: (s.relationship_type, s.canonical_parent_set_id, s.relationship_confidence, s.set_type)
+        for s in group_sets
+        if getattr(s, "relationship_source", "auto") == "manual"
+    }
+
+    # Pick root base candidate (same logic as year-page product tiles).
+    root_base = pick_product_root(group_sets)
 
     # Build signatures.
     sig_by_set_id = {}
@@ -619,6 +623,15 @@ def resolve_group_relationships(group_sets: list[CardSet], cards_by_set_id: dict
         if rt in ("base", "insert", "parallel", "variation", "standalone"):
             s.set_type = rt
 
+    for sid, (rt, pid, conf, st) in manual_snapshots.items():
+        s = by_id[sid]
+        if rt is not None:
+            s.relationship_type = rt
+        s.canonical_parent_set_id = pid
+        s.relationship_confidence = conf
+        if st is not None:
+            s.set_type = st
+
 
 def main():
     parser = argparse.ArgumentParser(description="Resolve parallel and variation relationships")
@@ -653,6 +666,10 @@ def main():
             processed += 1
 
         session.commit()
+
+        synced = sync_parent_ids_by_base_name(session, args.year)
+        if synced:
+            print(f"Synced parent_id for {synced} card sets")
 
         type_counts = defaultdict(int)
         linked_parallel = 0

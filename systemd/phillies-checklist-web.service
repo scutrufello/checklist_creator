@@ -1,0 +1,21 @@
+[Unit]
+Description=Phillies Cards Checklist web app (FastAPI / uvicorn)
+Documentation=file:///home/scutrufello/phillies-cards/systemd/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=scutrufello
+Group=scutrufello
+WorkingDirectory=/home/scutrufello/phillies-cards
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/scutrufello/phillies-cards/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=5
+
+StandardOutput=append:/home/scutrufello/phillies-cards/data/webapp.log
+StandardError=append:/home/scutrufello/phillies-cards/data/webapp.log
+
+[Install]
+WantedBy=multi-user.target

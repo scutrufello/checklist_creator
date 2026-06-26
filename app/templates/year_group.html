@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "components/parallel_set_list.html" import parallel_blocks %}
 
 {% block title %}{{ group.base_set.full_name }} - {{ year }} - Phillies Cards{% endblock %}
 
@@ -12,83 +13,47 @@
 </div>
 {% endblock %}
 
-{% block content %}
-<div class="mb-6">
-    <h1 class="text-xl sm:text-2xl font-bold text-phillies-blue mb-1">{{ group.base_set.full_name }}</h1>
-    <div class="flex flex-wrap items-center gap-3 text-sm text-base-content/60">
-        <span>{{ group.group_owned }}/{{ group.group_total }} collected</span>
-        {% if group.group_total > 0 %}
-        <span>({{ (group.group_owned / group.group_total * 100)|round(1) }}%)</span>
-        {% endif %}
-        <span>{{ 1 + (group.children|length) }} set{{ 's' if (1 + group.children|length) != 1 else '' }}</span>
-    </div>
-
-    {% if group.group_total > 0 %}
-    <div class="w-full bg-base-200 rounded-full h-2 mt-3">
-        <div class="bg-phillies-red h-2 rounded-full progress-fill"
-             style="width: {{ (group.group_owned / group.group_total * 100)|round(1) }}%"></div>
-    </div>
-    {% endif %}
-</div>
-
+{% macro render_checklist(section_data, base_set, base_owned, base_total, show_base) %}
 <div class="space-y-2">
-    <details id="set-accordion-{{ group.base_set.id }}" class="bg-white border border-base-200 rounded-lg">
+    {% if show_base and base_set %}
+    <details id="set-accordion-{{ base_set.id }}" class="bg-base-100 border border-base-200 rounded-lg">
         <summary class="flex items-center justify-between p-3 cursor-pointer">
             <div class="flex items-center gap-2 min-w-0">
                 <span class="badge badge-sm badge-outline">base</span>
-                <span class="font-medium truncate">{{ group.base_set.full_name }}</span>
+                <span class="font-medium truncate">{{ base_set.full_name }}</span>
             </div>
-            <span class="text-sm text-base-content/60 shrink-0">{{ group.base_owned }}/{{ group.base_total }}</span>
+            <span class="text-sm text-base-content/60 shrink-0">{{ base_owned }}/{{ base_total }}</span>
         </summary>
 
         <div class="px-3 pb-3">
-            <div class="text-xs text-base-content/60 mb-2">
-                <a class="link link-primary" href="/set/{{ group.base_set.id }}/{{ group.base_set.url_slug }}">Open full set page</a>
+            <div class="text-xs text-base-content/60 mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <a class="link link-primary" href="/set/{{ base_set.id }}/{{ base_set.url_slug }}">Open full set page</a>
+                <span class="text-base-content/30">·</span>
+                <a class="link link-primary" href="{{ base_set.tcdb_set_url }}" target="_blank" rel="noopener noreferrer">TCDB</a>
             </div>
             <div
-                hx-get="/partials/set/{{ group.base_set.id }}/cards"
-                hx-trigger="toggle from:#set-accordion-{{ group.base_set.id }} once"
+                hx-get="/partials/set/{{ base_set.id }}/cards"
+                hx-trigger="toggle from:#set-accordion-{{ base_set.id }} once"
                 hx-target="this"
                 hx-swap="innerHTML"
             >
                 <div class="text-sm text-base-content/50">Loading base cards...</div>
             </div>
 
-            {% if section_data.base_parallels %}
+            {% set base_pp = section_data.base_parallels_partitioned if section_data.base_parallels_partitioned is defined else {'numbered': [], 'unnumbered': section_data.base_parallels|default([])} %}
+            {% if base_pp.numbered or base_pp.unnumbered %}
             <div class="mt-4 space-y-2">
                 <div class="text-xs uppercase tracking-wide text-base-content/50">Base parallels</div>
-                {% for child in section_data.base_parallels %}
-                <details id="set-accordion-{{ child.set.id }}" class="bg-base-100 border border-base-200 rounded-lg">
-                    <summary class="flex items-center justify-between p-3 cursor-pointer">
-                        <div class="flex items-center gap-2 min-w-0">
-                            <span class="badge badge-sm badge-outline badge-secondary">parallel</span>
-                            <span class="truncate">{{ child.set.display_name }}</span>
-                        </div>
-                        <span class="text-sm text-base-content/60 shrink-0">{{ child.owned }}/{{ child.total }}</span>
-                    </summary>
-                    <div class="px-3 pb-3">
-                        <div class="text-xs text-base-content/60 mb-2">
-                            <a class="link link-primary" href="/set/{{ child.set.id }}/{{ child.set.url_slug }}">Open full set page</a>
-                        </div>
-                        <div
-                            hx-get="/partials/set/{{ child.set.id }}/cards"
-                            hx-trigger="toggle from:#set-accordion-{{ child.set.id }} once"
-                            hx-target="this"
-                            hx-swap="innerHTML"
-                        >
-                            <div class="text-sm text-base-content/50">Loading cards...</div>
-                        </div>
-                    </div>
-                </details>
-                {% endfor %}
+                {{ parallel_blocks(base_pp, base_set.id) }}
             </div>
             {% endif %}
         </div>
     </details>
+    {% endif %}
 
     {% for section in section_data.sections %}
     {% set child = section.parent %}
-    <details id="set-accordion-{{ child.set.id }}" class="bg-white border border-base-200 rounded-lg">
+    <details id="set-accordion-{{ child.set.id }}" class="bg-base-100 border border-base-200 rounded-lg">
         <summary class="flex items-center justify-between p-3 cursor-pointer">
             <div class="flex items-center gap-2 min-w-0">
                 {% set st = child.set.relationship_type or child.set.set_type %}
@@ -102,8 +67,10 @@
         </summary>
 
         <div class="px-3 pb-3">
-            <div class="text-xs text-base-content/60 mb-2">
+            <div class="text-xs text-base-content/60 mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
                 <a class="link link-primary" href="/set/{{ child.set.id }}/{{ child.set.url_slug }}">Open full set page</a>
+                <span class="text-base-content/30">·</span>
+                <a class="link link-primary" href="{{ child.set.tcdb_set_url }}" target="_blank" rel="noopener noreferrer">TCDB</a>
             </div>
             <div
                 hx-get="/partials/set/{{ child.set.id }}/cards"
@@ -114,37 +81,89 @@
                 <div class="text-sm text-base-content/50">Loading cards...</div>
             </div>
 
-            {% if section.parallels %}
+            {% set insert_pp = section.parallels_partitioned if section.parallels_partitioned is defined else {'numbered': [], 'unnumbered': section.parallels|default([])} %}
+            {% if insert_pp.numbered or insert_pp.unnumbered %}
             <div class="mt-4 space-y-2">
                 <div class="text-xs uppercase tracking-wide text-base-content/50">Parallels</div>
-                {% for p in section.parallels %}
-                <details id="set-accordion-{{ p.set.id }}" class="bg-base-100 border border-base-200 rounded-lg">
-                    <summary class="flex items-center justify-between p-3 cursor-pointer">
-                        <div class="flex items-center gap-2 min-w-0">
-                            <span class="badge badge-sm badge-outline badge-secondary">parallel</span>
-                            <span class="truncate">{{ p.set.display_name }}</span>
-                        </div>
-                        <span class="text-sm text-base-content/60 shrink-0">{{ p.owned }}/{{ p.total }}</span>
-                    </summary>
-                    <div class="px-3 pb-3">
-                        <div class="text-xs text-base-content/60 mb-2">
-                            <a class="link link-primary" href="/set/{{ p.set.id }}/{{ p.set.url_slug }}">Open full set page</a>
-                        </div>
-                        <div
-                            hx-get="/partials/set/{{ p.set.id }}/cards"
-                            hx-trigger="toggle from:#set-accordion-{{ p.set.id }} once"
-                            hx-target="this"
-                            hx-swap="innerHTML"
-                        >
-                            <div class="text-sm text-base-content/50">Loading cards...</div>
-                        </div>
-                    </div>
-                </details>
-                {% endfor %}
+                {{ parallel_blocks(insert_pp, child.set.id) }}
             </div>
             {% endif %}
         </div>
     </details>
     {% endfor %}
 </div>
+{% endmacro %}
+
+{% block content %}
+<div class="mb-6">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+        <h1 class="text-xl sm:text-2xl font-bold text-phillies-blue mb-1">{{ group.base_set.product_tile_name }}</h1>
+        <div class="flex items-center gap-2">
+            <a href="{{ group.base_set.tcdb_set_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-xs btn-ghost">TCDB</a>
+            <a href="/admin/year/{{ year }}/set/{{ group.base_set.id }}" class="btn btn-xs btn-ghost">Admin</a>
+        </div>
+    </div>
+    <div class="flex flex-wrap items-center gap-3 text-sm text-base-content/60">
+        {% if cluster_progress %}
+        <span>{{ cluster_progress.owned }}/{{ cluster_progress.total }} collected</span>
+        {% if cluster_progress.total > 0 %}
+        <span>({{ (cluster_progress.owned / cluster_progress.total * 100)|round(1) }}%)</span>
+        {% endif %}
+        {% else %}
+        <span>{{ group.group_owned }}/{{ group.group_total }} collected</span>
+        {% if group.group_total > 0 %}
+        <span>({{ (group.group_owned / group.group_total * 100)|round(1) }}%)</span>
+        {% endif %}
+        {% endif %}
+        <span>{{ 1 + (group.children|length) }} set{{ 's' if (1 + group.children|length) != 1 else '' }}</span>
+    </div>
+
+    {% if cluster_progress and cluster_progress.total > 0 %}
+    <div class="mt-3 space-y-3">
+        <div>
+            <div class="flex justify-between text-xs text-base-content/60 mb-1">
+                <span>Overall</span>
+                <span>{{ cluster_progress.owned }}/{{ cluster_progress.total }}</span>
+            </div>
+            <div class="w-full h-4 rounded-full bg-base-200 border-2 border-base-content/25 overflow-hidden">
+                <div class="h-full rounded-full bg-phillies-red progress-fill"
+                     style="width: {{ (cluster_progress.owned / cluster_progress.total * 100)|round(1) }}%"></div>
+            </div>
+        </div>
+        {% for bar in cluster_progress.sub_bars %}
+        <div>
+            <div class="flex justify-between text-xs text-base-content/60 mb-1">
+                <a href="#segment-{{ bar.key }}" class="link link-hover text-phillies-blue font-medium">{{ bar.label }}</a>
+                <span>{{ bar.owned }}/{{ bar.total }}</span>
+            </div>
+            <div class="w-full h-3 rounded-full bg-base-200 border-2 border-base-content/25 overflow-hidden">
+                <div class="h-full rounded-full bg-phillies-blue progress-fill"
+                     style="width: {{ (bar.owned / bar.total * 100)|round(1) if bar.total > 0 else 0 }}%"></div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% elif group.group_total > 0 %}
+    <div class="w-full h-4 rounded-full bg-base-200 mt-3 border-2 border-base-content/25 overflow-hidden">
+        <div class="h-full rounded-full bg-phillies-red progress-fill"
+             style="width: {{ (group.group_owned / group.group_total * 100)|round(1) }}%"></div>
+    </div>
+    {% endif %}
+</div>
+
+{% if segment_blocks %}
+<div class="space-y-8">
+    {% for block in segment_blocks %}
+    <section id="segment-{{ block.key }}" class="scroll-mt-20">
+        <div class="flex flex-wrap items-baseline justify-between gap-2 mb-3 border-b border-base-200 pb-2">
+            <h2 class="text-lg font-semibold text-phillies-blue">{{ block.label }}</h2>
+            <span class="text-sm text-base-content/60">{{ block.owned }}/{{ block.total }}</span>
+        </div>
+        {{ render_checklist(block.section_data, block.base_set, block.base_owned, block.base_total, block.show_base) }}
+    </section>
+    {% endfor %}
+</div>
+{% elif section_data %}
+{{ render_checklist(section_data, group.base_set, group.base_owned, group.base_total, true) }}
+{% endif %}
 {% endblock %}
