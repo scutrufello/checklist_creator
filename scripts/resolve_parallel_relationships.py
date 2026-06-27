@@ -633,6 +633,36 @@ def resolve_group_relationships(group_sets: list[CardSet], cards_by_set_id: dict
             s.set_type = st
 
 
+def resolve_relationships(session, year: int | None = None) -> int:
+    """Run parallel/insert relationship resolution for one year or all years. Returns group count."""
+    query = session.query(CardSet)
+    if year is not None:
+        query = query.filter(CardSet.year == year)
+    all_sets = query.all()
+
+    groups = defaultdict(list)
+    for s in all_sets:
+        groups[(s.year, s.base_name)].append(s)
+
+    set_ids = [s.id for s in all_sets]
+    cards_by_set_id: dict[int, list[Card]] = defaultdict(list)
+    if set_ids:
+        cards = session.query(Card).filter(Card.set_id.in_(set_ids)).all()
+        for c in cards:
+            cards_by_set_id[c.set_id].append(c)
+
+    processed = 0
+    for group_sets in groups.values():
+        if len(group_sets) < 2:
+            continue
+        resolve_group_relationships(group_sets, cards_by_set_id)
+        processed += 1
+
+    session.commit()
+    sync_parent_ids_by_base_name(session, year)
+    return processed
+
+
 def main():
     parser = argparse.ArgumentParser(description="Resolve parallel and variation relationships")
     parser.add_argument("--year", type=int, help="Year to process (default: all years)")
@@ -641,35 +671,11 @@ def main():
     init_db()
     session = get_session()
     try:
-        query = session.query(CardSet)
+        processed = resolve_relationships(session, args.year)
+        all_sets = session.query(CardSet)
         if args.year:
-            query = query.filter(CardSet.year == args.year)
-        all_sets = query.all()
-
-        groups = defaultdict(list)
-        for s in all_sets:
-            key = (s.year, s.base_name)
-            groups[key].append(s)
-
-        set_ids = [s.id for s in all_sets]
-        cards_by_set_id = defaultdict(list)
-        if set_ids:
-            cards = session.query(Card).filter(Card.set_id.in_(set_ids)).all()
-            for c in cards:
-                cards_by_set_id[c.set_id].append(c)
-
-        processed = 0
-        for _, group_sets in groups.items():
-            if len(group_sets) < 2:
-                continue
-            resolve_group_relationships(group_sets, cards_by_set_id)
-            processed += 1
-
-        session.commit()
-
-        synced = sync_parent_ids_by_base_name(session, args.year)
-        if synced:
-            print(f"Synced parent_id for {synced} card sets")
+            all_sets = all_sets.filter(CardSet.year == args.year)
+        all_sets = all_sets.all()
 
         type_counts = defaultdict(int)
         linked_parallel = 0

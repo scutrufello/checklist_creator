@@ -110,7 +110,7 @@ def classify_set_type(full_name: str, base_name: str, variant_name: str | None) 
         "refractor", "shimmer", "mojo", "xfractor", "foil", "prismatic",
         "die-cut", "die cut", "atomic", "wave", "lava", "speckle", "sparkle",
         "rainbow", "hyper", "crackle", "sapphire", "aqua", "pulsar",
-        "mini", "numbered", "mega", "superfractor",
+        "mini", "numbered", "mega", "superfractor", "glowback",
     ]
     has_slash_serial = bool(re.search(r"/\d+", variant_lower))
     has_parallel_finish = (
@@ -124,18 +124,18 @@ def classify_set_type(full_name: str, base_name: str, variant_name: str | None) 
         for kw in ("autograph", "autographs", "memorabilia", "relic", "on-card auto")
     )
 
-    # "Chrome Prospect Autographs - Gold Shimmer" → parallel of the autograph insert.
-    if autograph_or_mem_line and has_parallel_finish:
-        if not _die_cut_autograph_insert_only(variant_lower):
+    # Finish layers on insert-family lines (All-Stars Crackle, Chrome refractors, FoilFractors, …).
+    # Must run before insert_keywords — "all-star" / "relic" in the product name would otherwise
+    # win and leave color/finish parallels typed as inserts (2026 Topps 35th Anniversary S2).
+    if has_parallel_finish:
+        if autograph_or_mem_line:
+            if not _die_cut_autograph_insert_only(variant_lower):
+                return "parallel"
+        else:
             return "parallel"
 
     if any(kw in variant_lower for kw in insert_keywords):
         return "insert"
-
-    # Finish layers without autograph/mem in the variant (e.g. "Black Foil", "FoilFractors"
-    # on "2025 Greatest Hits"). insert_keywords run first so named lines like "black gold" stay insert.
-    if has_parallel_finish:
-        return "parallel"
 
     # If variant has "Product Name - Finish", treat finish segment as parallel signal.
     # (e.g. "Topps Black Gold - Blue Wave" — "black/gold" in product name must not imply parallel alone.)

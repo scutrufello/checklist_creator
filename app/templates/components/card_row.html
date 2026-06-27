@@ -1,4 +1,5 @@
-<tr id="card-{{ card.id }}" class="hover:bg-base-200/50 transition-colors {% if card.owned %}card-row-owned{% endif %}">
+{% from "components/card_image_macros.html" import card_table_images %}
+<tr id="card-{{ card.id }}" class="card-row hover:bg-base-200/50 transition-colors {% if card.owned %}card-row-owned{% endif %}{% if card.owned and card.wants_upgrade %} card-row-wants-upgrade{% endif %}" data-owned="{{ 'true' if card.owned else 'false' }}">
     <td class="text-center">
         <input type="checkbox"
                class="checkbox checkbox-sm checkbox-success"
@@ -6,13 +7,32 @@
                hx-post="/api/card/{{ card.id }}/toggle"
                hx-target="#card-{{ card.id }}"
                hx-swap="outerHTML"
+               aria-label="Owned"
         />
+    </td>
+    <td class="text-center">
+        <input type="checkbox"
+               class="checkbox checkbox-sm checkbox-warning"
+               {% if card.wants_upgrade %}checked{% endif %}
+               {% if not card.owned %}disabled{% endif %}
+               hx-post="/api/card/{{ card.id }}/toggle-upgrade"
+               hx-target="#card-{{ card.id }}"
+               hx-swap="outerHTML"
+               aria-label="Want condition upgrade"
+               title="Want better condition"
+        />
+    </td>
+    <td class="hidden md:table-cell w-[6.5rem] p-1">
+        {{ card_table_images(card, set_name|default('')) }}
     </td>
     <td class="font-mono text-sm card-number">{{ card.number }}</td>
     <td class="font-medium">
         <span>{{ card.player_name }}</span>
         {% if card.variant_display %}
         <div class="text-xs text-base-content/60 mt-0.5">{{ card.variant_display }}</div>
+        {% endif %}
+        {% if card.owned and card.wants_upgrade %}
+        <div class="text-xs text-warning mt-0.5">Upgrade wanted</div>
         {% endif %}
     </td>
     <td class="hidden sm:table-cell">

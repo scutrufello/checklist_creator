@@ -8,9 +8,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import and_, func, distinct, case, or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
-from app.database import get_session, init_db
+from app.database import get_session, init_db, load_config
 from app.models import Card, CardSet
 from app.product_clusters import (
     attach_parallel_partitions,
@@ -46,6 +46,13 @@ app = FastAPI(title="Phillies Cards Checklist")
 BASE_DIR = os.path.dirname(__file__)
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
+
+_config = load_config()
+_image_dir = _config["storage"]["image_path"]
+if not os.path.isabs(_image_dir):
+    _image_dir = os.path.normpath(os.path.join(os.path.dirname(BASE_DIR), _image_dir))
+os.makedirs(_image_dir, exist_ok=True)
+app.mount("/card-images", StaticFiles(directory=_image_dir), name="card-images")
 
 
 def get_db():
@@ -142,6 +149,122 @@ def _search_cards(
         .all()
     )
     return rows
+
+
+def _build_need_year_summary(db: Session, *, show_hidden: bool = False) -> list[dict]:
+    """Years with at least one missing completion-counting card."""
+    filters = [Card.owned == False, _completion_card_filter()]
+    if not show_hidden:
+        filters.append(CardSet.is_hidden == False)
+
+    rows = (
+        db.query(
+            CardSet.year,
+            func.count(Card.id).label("missing_count"),
+        )
+        .join(Card, Card.set_id == CardSet.id)
+        .filter(*filters)
+        .group_by(CardSet.year)
+        .order_by(CardSet.year.desc())
+        .all()
+    )
+    return [
+        {"year": row.year, "missing_count": row.missing_count}
+        for row in rows
+        if row.missing_count
+    ]
+
+
+def _build_need_groups(
+    db: Session,
+    *,
+    year_from: int,
+    year_to: int,
+    category: str | None = None,
+    q: str = "",
+    show_hidden: bool = False,
+) -> tuple[list[dict], int]:
+    """Missing cards grouped by set for a year range."""
+    if year_from > year_to:
+        year_from, year_to = year_to, year_from
+
+    filters = [
+        Card.owned == False,
+        _completion_card_filter(),
+        CardSet.year >= year_from,
+        CardSet.year <= year_to,
+    ]
+    if not show_hidden:
+        filters.append(CardSet.is_hidden == False)
+
+    q = (q or "").strip()
+    if len(q) >= 2:
+        pat = _search_like_pattern(q)
+        filters.append(
+            or_(
+                Card.player_name.ilike(pat),
+                Card.number.ilike(pat),
+                Card.variant.ilike(pat),
+                CardSet.full_name.ilike(pat),
+            )
+        )
+
+    rows = (
+        db.query(Card, CardSet)
+        .join(CardSet, Card.set_id == CardSet.id)
+        .filter(*filters)
+        .order_by(
+            CardSet.year.desc(),
+            CardSet.full_name,
+            Card.sort_number,
+            Card.number,
+            Card.variant,
+        )
+        .all()
+    )
+
+    by_set: dict[int, dict] = {}
+    for card, card_set in rows:
+        if not show_hidden and set_is_hidden(card_set):
+            continue
+        if category and effective_year_list_category(card_set) != category:
+            continue
+        bucket = by_set.get(card_set.id)
+        if bucket is None:
+            bucket = {"card_set": card_set, "cards": []}
+            by_set[card_set.id] = bucket
+        bucket["cards"].append(card)
+
+    groups = list(by_set.values())
+    groups.sort(key=lambda g: (-g["card_set"].year, g["card_set"].full_name.lower()))
+    for group in groups:
+        group["missing_count"] = len(group["cards"])
+
+    total = sum(group["missing_count"] for group in groups)
+    return groups, total
+
+
+def _parse_optional_query_int(value: str | None) -> int | None:
+    if value is None:
+        return None
+    value = str(value).strip()
+    if not value:
+        return None
+    return int(value)
+
+
+def _parse_need_year_filter(
+    year: int | None,
+    year_from: int | None,
+    year_to: int | None,
+) -> tuple[int | None, int | None, bool]:
+    if year is not None:
+        return year, year, True
+    if year_from is not None or year_to is not None:
+        y_from = year_from if year_from is not None else year_to
+        y_to = year_to if year_to is not None else year_from
+        return y_from, y_to, True
+    return None, None, False
 
 
 def _build_year_set_groups(db: Session, year: int) -> list[dict]:
@@ -387,6 +510,13 @@ def _build_cluster_layout(db: Session, group: dict) -> tuple[dict, list[dict]]:
         seg_group = {"base_set": seg_base, "children": seg_children}
         section_data = _build_group_sections(db, seg_group)
         base_stats = stats_by_set_id.get(seg_base.id, {"total": 0, "owned": 0}) if show_base else {"total": 0, "owned": 0}
+        breakdown = _build_progress_breakdown(
+            section_data,
+            stats_by_set_id,
+            show_base=show_base,
+            base_set_id=seg_base.id if show_base else None,
+        )
+        bar["breakdown"] = breakdown
         segment_blocks.append({
             "key": key,
             "label": bar["label"],
@@ -397,6 +527,7 @@ def _build_cluster_layout(db: Session, group: dict) -> tuple[dict, list[dict]]:
             "base_owned": base_stats["owned"],
             "base_total": base_stats["total"],
             "section_data": section_data,
+            "breakdown": breakdown,
         })
 
     return cluster_progress, segment_blocks
@@ -507,6 +638,119 @@ def _build_group_sections(db: Session, group: dict) -> dict:
     return attach_parallel_partitions(raw, serial_by_set_id)
 
 
+_INSERT_AUTO_NAME = re.compile(r"autograph", re.I)
+_INSERT_RELIC_NAME = re.compile(r"relic|memorabilia|patch|jersey|material", re.I)
+
+
+def _insert_hit_bucket(full_name: str) -> str:
+    """Bucket insert families for optional typed progress rows."""
+    is_auto = bool(_INSERT_AUTO_NAME.search(full_name or ""))
+    is_relic = bool(_INSERT_RELIC_NAME.search(full_name or ""))
+    if is_auto and is_relic:
+        return "relic_auto"
+    if is_auto:
+        return "autograph"
+    if is_relic:
+        return "relic"
+    return "other"
+
+
+def _progress_pair_row(
+    left_label: str,
+    left_ids: list[int],
+    right_label: str,
+    right_ids: list[int],
+    stats_by_set_id: dict[int, dict[str, int]],
+) -> dict | None:
+    left = progress_from_sets(left_ids, stats_by_set_id)
+    right = progress_from_sets(right_ids, stats_by_set_id)
+    if left["total"] == 0 and right["total"] == 0:
+        return None
+    return {
+        "left_label": left_label,
+        "left": left,
+        "right_label": right_label,
+        "right": right,
+    }
+
+
+def _build_progress_breakdown(
+    section_data: dict,
+    stats_by_set_id: dict[int, dict[str, int]],
+    *,
+    show_base: bool,
+    base_set_id: int | None,
+) -> dict:
+    """Paired progress rows for base/insert checklists vs their parallels."""
+    base_ids = [base_set_id] if show_base and base_set_id else []
+    base_par_ids = [c["set"].id for c in section_data.get("base_parallels", [])]
+
+    insert_ids: list[int] = []
+    insert_par_ids: list[int] = []
+    typed_ids: dict[str, tuple[list[int], list[int]]] = {
+        "autograph": ([], []),
+        "relic": ([], []),
+        "relic_auto": ([], []),
+        "other": ([], []),
+    }
+    for section in section_data.get("sections", []):
+        parent_id = section["parent"]["set"].id
+        parallel_ids = [child["set"].id for child in section.get("parallels", [])]
+        insert_ids.append(parent_id)
+        insert_par_ids.extend(parallel_ids)
+        bucket = _insert_hit_bucket(section["parent"]["set"].full_name or "")
+        typed_ids[bucket][0].append(parent_id)
+        typed_ids[bucket][1].extend(parallel_ids)
+
+    summary_pairs = [
+        row
+        for row in [
+            _progress_pair_row(
+                "Base cards",
+                base_ids,
+                "Base parallels",
+                base_par_ids,
+                stats_by_set_id,
+            ),
+            _progress_pair_row(
+                "Inserts",
+                insert_ids,
+                "Insert parallels",
+                insert_par_ids,
+                stats_by_set_id,
+            ),
+        ]
+        if row is not None
+    ]
+
+    typed_labels = {
+        "autograph": ("Autographs", "Autograph parallels"),
+        "relic": ("Relics", "Relic parallels"),
+        "relic_auto": ("Relic autos", "Relic auto parallels"),
+        "other": ("Other inserts", "Other insert parallels"),
+    }
+    detail_pairs = [
+        row
+        for key in ("autograph", "relic", "relic_auto", "other")
+        for row in [
+            _progress_pair_row(
+                typed_labels[key][0],
+                typed_ids[key][0],
+                typed_labels[key][1],
+                typed_ids[key][1],
+                stats_by_set_id,
+            )
+        ]
+        if row is not None
+    ]
+
+    return {
+        "summary_pairs": summary_pairs,
+        "detail_pairs": detail_pairs,
+        "has_content": bool(summary_pairs or detail_pairs),
+    }
+
+
 def _normalize_section_data(section_data: dict | None, db: Session | None = None) -> dict | None:
     """Ensure numbered/unnumbered parallel keys exist (templates require them)."""
     if section_data is None:
@@ -548,6 +792,56 @@ def search_page(request: Request, q: str = "", db: Session = Depends(get_db)):
         "request": request,
         "query": q,
         "results": results,
+    })
+
+
+@app.get("/need", response_class=HTMLResponse)
+def need_list(
+    request: Request,
+    category: str | None = None,
+    q: str = "",
+    show_hidden: bool = False,
+    db: Session = Depends(get_db),
+):
+    """Cross-set view of unowned cards, grouped by set (card-show friendly)."""
+    params = request.query_params
+    year = _parse_optional_query_int(params.get("year"))
+    year_from = _parse_optional_query_int(params.get("year_from"))
+    year_to = _parse_optional_query_int(params.get("year_to"))
+
+    q = (q or "").strip()
+    if category and category not in CATEGORY_LABEL_BY_KEY:
+        category = None
+
+    year_summary = _build_need_year_summary(db, show_hidden=show_hidden)
+    y_from, y_to, has_year_filter = _parse_need_year_filter(year, year_from, year_to)
+
+    need_groups: list[dict] = []
+    total_missing = 0
+    if has_year_filter and y_from is not None and y_to is not None:
+        need_groups, total_missing = _build_need_groups(
+            db,
+            year_from=y_from,
+            year_to=y_to,
+            category=category,
+            q=q,
+            show_hidden=show_hidden,
+        )
+
+    return templates.TemplateResponse("need.html", {
+        "request": request,
+        "year_summary": year_summary,
+        "need_groups": need_groups,
+        "total_missing": total_missing,
+        "has_year_filter": has_year_filter,
+        "year": year,
+        "year_from": y_from,
+        "year_to": y_to,
+        "category": category,
+        "query": q,
+        "show_hidden": show_hidden,
+        "categories": YEAR_LIST_CATEGORIES,
+        "category_labels": CATEGORY_LABEL_BY_KEY,
     })
 
 
@@ -653,6 +947,7 @@ def year_group_view(
     cluster_progress = None
     segment_blocks = None
     section_data = None
+    progress_breakdown = None
     if group.get("cluster_kind"):
         cluster_progress, segment_blocks = _build_cluster_layout(db, group)
         segment_blocks = [
@@ -661,6 +956,12 @@ def year_group_view(
         ]
     else:
         section_data = _normalize_section_data(_build_group_sections(db, group), db)
+        progress_breakdown = _build_progress_breakdown(
+            section_data,
+            _group_stats_by_set_id(db, group),
+            show_base=True,
+            base_set_id=group["base_set"].id,
+        )
 
     return templates.TemplateResponse("year_group.html", {
         "request": request,
@@ -669,6 +970,7 @@ def year_group_view(
         "section_data": section_data,
         "cluster_progress": cluster_progress,
         "segment_blocks": segment_blocks,
+        "progress_breakdown": progress_breakdown,
     })
 
 
@@ -724,23 +1026,50 @@ def set_view(request: Request, set_id: int, set_slug: str, db: Session = Depends
 
 
 @app.post("/api/card/{card_id}/toggle", response_class=HTMLResponse)
-def toggle_card(request: Request, card_id: int, db: Session = Depends(get_db)):
+def toggle_card(
+    request: Request,
+    card_id: int,
+    context: str = "",
+    db: Session = Depends(get_db),
+):
     """Toggle owned status of a card. Returns updated card row partial."""
-    card = db.query(Card).filter_by(id=card_id).first()
+    card = db.query(Card).options(joinedload(Card.card_set)).filter_by(id=card_id).first()
     if not card:
         return HTMLResponse("Card not found", status_code=404)
 
     card.owned = not card.owned
+    if not card.owned:
+        card.wants_upgrade = False
     db.commit()
     db.refresh(card)
 
-    return templates.TemplateResponse("components/card_row.html", {
+    if context == "need" and card.owned:
+        return HTMLResponse(content="")
+
+    return templates.TemplateResponse("components/card_toggle_sync.html", {
         "request": request,
         "card": card,
     })
 
 
-@app.get("/api/stats/{set_id}", response_class=JSONResponse)
+@app.post("/api/card/{card_id}/toggle-upgrade", response_class=HTMLResponse)
+def toggle_card_upgrade(request: Request, card_id: int, db: Session = Depends(get_db)):
+    """Toggle condition-upgrade flag (only when card is owned). Returns updated card row."""
+    card = db.query(Card).options(joinedload(Card.card_set)).filter_by(id=card_id).first()
+    if not card:
+        return HTMLResponse("Card not found", status_code=404)
+
+    if not card.owned:
+        card.wants_upgrade = False
+    else:
+        card.wants_upgrade = not card.wants_upgrade
+    db.commit()
+    db.refresh(card)
+
+    return templates.TemplateResponse("components/card_toggle_sync.html", {
+        "request": request,
+        "card": card,
+    })
 def set_stats(set_id: int, db: Session = Depends(get_db)):
     """Get stats for a set (used for live counter updates)."""
     total = (

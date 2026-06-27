@@ -1,4 +1,7 @@
 {% extends "base.html" %}
+{% from "components/missing_only_toggle.html" import missing_only_toggle %}
+{% from "components/view_mode_toggle.html" import view_mode_toggle %}
+{% from "components/card_checklist.html" import render_card_checklist %}
 
 {% block title %}{{ card_set.full_name }} - Phillies Cards{% endblock %}
 
@@ -28,11 +31,14 @@
                 {% endif %}
             </div>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+            {{ view_mode_toggle() }}
+            {{ missing_only_toggle() }}
             <a href="{{ card_set.tcdb_set_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-xs btn-ghost">TCDB</a>
             <a href="/admin/year/{{ card_set.year }}/set/{{ card_set.id }}" class="btn btn-xs btn-ghost">Admin</a>
         </div>
     </div>
+    <p class="text-sm text-phillies-blue mt-2 hidden" data-missing-only-page-status></p>
 
     {% if total > 0 %}
     <div class="w-full bg-base-200 rounded-full h-2 mt-3">
@@ -64,33 +70,10 @@
 {% endif %}
 
 <!-- Card list -->
-<div class="overflow-x-auto">
-    <table class="table table-sm w-full">
-        <thead>
-            <tr class="bg-phillies-blue text-white">
-                <th class="w-10 text-center rounded-tl-lg">Own</th>
-                <th class="w-16">#</th>
-                <th>Player</th>
-                <th class="hidden sm:table-cell">Tags</th>
-            </tr>
-        </thead>
-        <tbody id="card-list">
-            {% for card in cards %}
-            {% include "components/card_row.html" %}
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-
-{% if not cards %}
-<div class="text-center py-12 text-base-content/50">
-    <p>No cards in this set.</p>
-</div>
-{% endif %}
+{{ render_card_checklist(cards, card_set) }}
 
 <script>
 document.body.addEventListener('htmx:afterSwap', function(evt) {
-    // Update the set counter after toggling
     fetch('/api/stats/{{ card_set.id }}')
         .then(r => r.json())
         .then(data => {

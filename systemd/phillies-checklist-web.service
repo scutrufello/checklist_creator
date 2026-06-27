@@ -3,6 +3,7 @@ Description=Phillies Cards Checklist web app (FastAPI / uvicorn)
 Documentation=file:///home/scutrufello/phillies-cards/systemd/README.md
 After=network-online.target
 Wants=network-online.target
+RequiresMountsFor=/mnt/phillies-images
 
 [Service]
 Type=simple

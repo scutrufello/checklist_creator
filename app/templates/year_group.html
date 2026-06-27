@@ -1,7 +1,58 @@
 {% extends "base.html" %}
 {% from "components/parallel_set_list.html" import parallel_blocks %}
+{% from "components/missing_only_toggle.html" import missing_only_toggle %}
+{% from "components/view_mode_toggle.html" import view_mode_toggle %}
 
 {% block title %}{{ group.base_set.full_name }} - {{ year }} - Phillies Cards{% endblock %}
+
+{% macro progress_fill(owned, total, color_class, height_class) %}
+<div class="w-full {{ height_class }} rounded-full bg-base-200 border border-base-content/20 overflow-hidden">
+    <div class="h-full rounded-full {{ color_class }} progress-fill"
+         style="width: {{ (owned / total * 100)|round(1) if total > 0 else 0 }}%"></div>
+</div>
+{% endmacro %}
+
+{% macro render_progress_side(label, owned, total, color_class, height_class) %}
+<div>
+    <div class="flex justify-between text-xs text-base-content/60 mb-0.5 gap-2">
+        <span class="truncate">{{ label }}</span>
+        <span class="shrink-0 tabular-nums">{{ owned }}/{{ total }}</span>
+    </div>
+    {{ progress_fill(owned, total, color_class, height_class) }}
+</div>
+{% endmacro %}
+
+{% macro render_paired_progress_row(pair, color_class='bg-phillies-blue', height_class='h-2') %}
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+    {{ render_progress_side(pair.left_label, pair.left.owned, pair.left.total, color_class, height_class) }}
+    {{ render_progress_side(pair.right_label, pair.right.owned, pair.right.total, color_class, height_class) }}
+</div>
+{% endmacro %}
+
+{% macro render_progress_breakdown(breakdown) %}
+{% if breakdown and breakdown.has_content %}
+<details class="group/breakdown mt-1 ml-1">
+    <summary class="text-xs text-base-content/50 cursor-pointer select-none list-none flex items-center gap-1 hover:text-phillies-blue">
+        <svg class="w-3 h-3 transition-transform group-open/breakdown:rotate-90" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+        </svg>
+        Breakdown
+    </summary>
+    <div class="mt-2 space-y-2 pl-4 border-l border-base-200">
+        {% for pair in breakdown.summary_pairs %}
+        {{ render_paired_progress_row(pair) }}
+        {% endfor %}
+        {% if breakdown.detail_pairs %}
+        <div class="pt-1 space-y-2 border-t border-base-200/80">
+            {% for pair in breakdown.detail_pairs %}
+            {{ render_paired_progress_row(pair, 'bg-phillies-red/80', 'h-1.5') }}
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</details>
+{% endif %}
+{% endmacro %}
 
 {% block breadcrumb %}
 <div class="breadcrumbs text-sm mb-4">
@@ -98,11 +149,14 @@
 <div class="mb-6">
     <div class="flex flex-wrap items-start justify-between gap-3">
         <h1 class="text-xl sm:text-2xl font-bold text-phillies-blue mb-1">{{ group.base_set.product_tile_name }}</h1>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+            {{ view_mode_toggle() }}
+            {{ missing_only_toggle() }}
             <a href="{{ group.base_set.tcdb_set_url }}" target="_blank" rel="noopener noreferrer" class="btn btn-xs btn-ghost">TCDB</a>
             <a href="/admin/year/{{ year }}/set/{{ group.base_set.id }}" class="btn btn-xs btn-ghost">Admin</a>
         </div>
     </div>
+    <p class="text-sm text-phillies-blue mt-2 hidden" data-missing-only-page-status></p>
     <div class="flex flex-wrap items-center gap-3 text-sm text-base-content/60">
         {% if cluster_progress %}
         <span>{{ cluster_progress.owned }}/{{ cluster_progress.total }} collected</span>
@@ -140,13 +194,21 @@
                 <div class="h-full rounded-full bg-phillies-blue progress-fill"
                      style="width: {{ (bar.owned / bar.total * 100)|round(1) if bar.total > 0 else 0 }}%"></div>
             </div>
+            {{ render_progress_breakdown(bar.breakdown) }}
         </div>
         {% endfor %}
     </div>
     {% elif group.group_total > 0 %}
-    <div class="w-full h-4 rounded-full bg-base-200 mt-3 border-2 border-base-content/25 overflow-hidden">
-        <div class="h-full rounded-full bg-phillies-red progress-fill"
-             style="width: {{ (group.group_owned / group.group_total * 100)|round(1) }}%"></div>
+    <div class="mt-3">
+        <div class="flex justify-between text-xs text-base-content/60 mb-1">
+            <span>Overall</span>
+            <span>{{ group.group_owned }}/{{ group.group_total }}</span>
+        </div>
+        <div class="w-full h-4 rounded-full bg-base-200 border-2 border-base-content/25 overflow-hidden">
+            <div class="h-full rounded-full bg-phillies-red progress-fill"
+                 style="width: {{ (group.group_owned / group.group_total * 100)|round(1) }}%"></div>
+        </div>
+        {{ render_progress_breakdown(progress_breakdown) }}
     </div>
     {% endif %}
 </div>

@@ -1,0 +1,67 @@
+{% macro card_binder_cell(card, oob=false) %}
+<div id="binder-card-{{ card.id }}"
+     class="card-binder-cell card-row flex flex-col rounded-lg border border-base-300 bg-base-100 p-1.5 sm:p-2 shadow-sm hover:shadow transition-shadow {% if card.owned %}card-row-owned{% endif %}{% if card.owned and card.wants_upgrade %} card-row-wants-upgrade{% endif %}"
+     data-owned="{{ 'true' if card.owned else 'false' }}"
+     {% if oob %}hx-swap-oob="true"{% endif %}>
+    <div class="relative aspect-[5/7] w-full mb-1.5 rounded overflow-hidden bg-base-200 border border-base-300/80">
+        {% if card.front_image_url %}
+        <div class="block w-full h-full {% if card.has_back_image %}cursor-pointer{% endif %}"
+             {% if card.has_back_image %}
+             data-card-image-flip
+             data-front-url="{{ card.front_image_url }}"
+             data-back-url="{{ card.back_image_url }}"
+             role="button"
+             tabindex="0"
+             title="Click to show back"
+             aria-label="Card image, front. Click to show back."
+             {% else %}
+             title="Front only"
+             {% endif %}>
+            <img src="{{ card.front_image_url }}"
+                 alt="Front — {{ card.player_name }}"
+                 class="w-full h-full object-contain pointer-events-none"
+                 loading="lazy"
+                 data-card-flip-img
+                 onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden')">
+            <span class="hidden absolute inset-0 flex items-center justify-center text-[10px] text-base-content/40 px-1 text-center">No image</span>
+        </div>
+        {% else %}
+        <span class="absolute inset-0 flex items-center justify-center text-[10px] text-base-content/40 px-1 text-center">No scan</span>
+        {% endif %}
+    </div>
+    <div class="text-center min-w-0 flex-1 px-0.5">
+        <div class="font-mono text-xs text-base-content/70">#{{ card.number }}</div>
+        <div class="font-medium text-xs sm:text-sm leading-tight line-clamp-2" title="{{ card.player_name }}">{{ card.player_name }}</div>
+        {% if card.variant_display %}
+        <div class="text-[10px] text-base-content/60 line-clamp-2 mt-0.5" title="{{ card.variant_display }}">{{ card.variant_display }}</div>
+        {% endif %}
+        {% if card.tags_list %}
+        <div class="flex flex-wrap justify-center gap-0.5 mt-1">
+            {% for tag in card.tags_list %}
+            <span class="badge badge-xs badge-outline scale-90">{{ tag }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    <div class="flex justify-center items-center gap-2 mt-1.5 pt-1.5 border-t border-base-200/80">
+        <input type="checkbox"
+               class="checkbox checkbox-xs checkbox-success"
+               {% if card.owned %}checked{% endif %}
+               hx-post="/api/card/{{ card.id }}/toggle"
+               hx-target="#card-{{ card.id }}"
+               hx-swap="outerHTML"
+               aria-label="Owned"
+        />
+        <input type="checkbox"
+               class="checkbox checkbox-xs checkbox-warning"
+               {% if card.wants_upgrade %}checked{% endif %}
+               {% if not card.owned %}disabled{% endif %}
+               hx-post="/api/card/{{ card.id }}/toggle-upgrade"
+               hx-target="#card-{{ card.id }}"
+               hx-swap="outerHTML"
+               aria-label="Want condition upgrade"
+               title="Want better condition"
+        />
+    </div>
+</div>
+{% endmacro %}

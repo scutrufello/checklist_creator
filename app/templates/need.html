@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}Need List - Phillies Cards{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumbs text-sm mb-4">
+    <ul>
+        <li><a href="/" class="text-phillies-blue hover:text-phillies-red">Home</a></li>
+        <li class="font-semibold">Need list</li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-xl sm:text-2xl font-bold text-phillies-blue mb-1">Need list</h1>
+    <p class="text-sm text-base-content/70">Unowned cards only — for card shows and swaps. Upgrades are excluded (still owned).</p>
+</div>
+
+<form action="/need" method="get" hx-boost="false" class="card bg-base-100 border border-base-200 shadow-sm mb-6">
+    <div class="card-body p-4 gap-4">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <label class="form-control">
+                <span class="label-text text-xs mb-1">Year</span>
+                <input type="number" name="year" value="{{ year if year is not none else '' }}"
+                       placeholder="e.g. 2026"
+                       class="input input-bordered input-sm w-full"
+                       min="1800" max="2100" />
+            </label>
+            <label class="form-control">
+                <span class="label-text text-xs mb-1">From</span>
+                <input type="number" name="year_from" value="{{ year_from if year_from is not none and year is none else '' }}"
+                       placeholder="2024"
+                       class="input input-bordered input-sm w-full"
+                       min="1800" max="2100" />
+            </label>
+            <label class="form-control">
+                <span class="label-text text-xs mb-1">To</span>
+                <input type="number" name="year_to" value="{{ year_to if year_to is not none and year is none else '' }}"
+                       placeholder="2026"
+                       class="input input-bordered input-sm w-full"
+                       min="1800" max="2100" />
+            </label>
+            <label class="form-control">
+                <span class="label-text text-xs mb-1">Category</span>
+                <select name="category" class="select select-bordered select-sm w-full">
+                    <option value="">All categories</option>
+                    {% for key, label in categories %}
+                    <option value="{{ key }}" {% if category == key %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-2">
+            <input type="search" name="q" value="{{ query }}"
+                   placeholder="Player, #, set name…"
+                   class="input input-bordered input-sm flex-1"
+                   minlength="2" />
+            <button type="submit" class="btn btn-sm bg-phillies-blue text-white border-0 hover:bg-phillies-blue/90">Show needs</button>
+        </div>
+        <p class="text-xs text-base-content/50">Pick a single year or a from/to range. Optional player or set search (2+ characters).</p>
+    </div>
+</form>
+
+{% if not has_year_filter %}
+{% if year_summary %}
+<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+    {% for row in year_summary %}
+    <a href="/need?year={{ row.year }}"
+       class="card bg-base-100 border border-base-200 shadow-sm hover:border-phillies-blue/30 transition-colors">
+        <div class="card-body p-4">
+            <div class="text-2xl font-bold text-phillies-blue">{{ row.year }}</div>
+            <div class="text-sm text-base-content/70">{{ "{:,}".format(row.missing_count) }} missing</div>
+        </div>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="text-center py-12 text-base-content/50">
+    <p>Nothing missing — collection complete!</p>
+</div>
+{% endif %}
+
+{% elif need_groups %}
+<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-4">
+    <p class="text-sm font-medium text-base-content/80">
+        {% if year is not none %}
+        {{ year }}
+        {% else %}
+        {{ year_from }}–{{ year_to }}
+        {% endif %}
+        — {{ "{:,}".format(total_missing) }} missing across {{ need_groups|length }} set{% if need_groups|length != 1 %}s{% endif %}
+    </p>
+    {% if query %}
+    <span class="text-xs text-base-content/50">filtered by “{{ query }}”</span>
+    {% endif %}
+    {% if category %}
+    <span class="badge badge-outline badge-sm">{{ category_labels[category] }}</span>
+    {% endif %}
+</div>
+
+{% if total_missing > 3000 and not query and not category %}
+<div class="alert alert-info shadow-sm mb-4 text-sm">
+    <span>Large list — add a player search or category filter to narrow results at a show.</span>
+</div>
+{% endif %}
+
+<div class="space-y-2">
+    {% for group in need_groups %}
+    <details class="group bg-base-100 border border-base-200 rounded-lg shadow-sm"
+             {% if total_missing <= 500 and loop.index <= 8 %}open{% endif %}>
+        <summary class="cursor-pointer px-3 py-2.5 flex flex-wrap items-center gap-2 hover:bg-base-200/30 rounded-lg list-none [&::-webkit-details-marker]:hidden">
+            <svg class="h-4 w-4 shrink-0 text-base-content/50 transition-transform group-open:rotate-90" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+            <span class="font-medium text-sm flex-1 min-w-0">{{ group.card_set.full_name }}</span>
+            <span class="badge badge-sm badge-primary">{{ group.missing_count }}</span>
+            <span class="flex items-center gap-2 text-xs shrink-0" onclick="event.stopPropagation()">
+                <a href="/set/{{ group.card_set.id }}/{{ group.card_set.url_slug }}" class="link link-hover">Checklist</a>
+                <a href="{{ group.card_set.tcdb_set_url }}" target="_blank" rel="noopener noreferrer" class="link link-hover">TCDB</a>
+            </span>
+        </summary>
+        <div class="overflow-x-auto border-t border-base-200">
+            <table class="table table-xs w-full">
+                <thead>
+                    <tr class="text-base-content/60">
+                        <th class="w-10"></th>
+                        <th class="w-16">#</th>
+                        <th>Player</th>
+                        <th class="hidden sm:table-cell w-28">Tags</th>
+                        <th class="w-24 text-right">Links</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for card in group.cards %}
+                    {% with card_set=group.card_set %}
+                    {% include "components/need_row.html" %}
+                    {% endwith %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </details>
+    {% endfor %}
+</div>
+
+{% else %}
+<div class="text-center py-12 text-base-content/50">
+    <p>No missing cards match these filters.</p>
+    <a href="/need" class="link link-primary mt-2 inline-block">Pick a different year</a>
+</div>
+{% endif %}
+{% endblock %}

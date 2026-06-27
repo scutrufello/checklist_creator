@@ -1,0 +1,30 @@
+<tr id="need-row-{{ card.id }}" class="hover:bg-base-200/40">
+    <td class="text-center w-10">
+        <input type="checkbox"
+               class="checkbox checkbox-sm checkbox-success"
+               hx-post="/api/card/{{ card.id }}/toggle?context=need"
+               hx-target="#need-row-{{ card.id }}"
+               hx-swap="delete"
+               aria-label="Mark owned"
+        />
+    </td>
+    <td class="font-mono text-sm whitespace-nowrap">{{ card.number }}</td>
+    <td>
+        <span class="font-medium">{{ card.player_name }}</span>
+        {% if card.variant_display %}
+        <div class="text-xs text-base-content/60 mt-0.5">{{ card.variant_display }}</div>
+        {% endif %}
+    </td>
+    <td class="hidden sm:table-cell">
+        {% if card.tags_list %}
+        <div class="flex flex-wrap gap-1">
+            {% for tag in card.tags_list %}
+            <span class="badge badge-xs badge-outline">{{ tag }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </td>
+    <td class="text-right whitespace-nowrap">
+        <a href="/set/{{ card_set.id }}/{{ card_set.url_slug }}#card-{{ card.id }}" class="link link-hover text-xs">Set</a>
+    </td>
+</tr>

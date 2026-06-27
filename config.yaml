@@ -11,8 +11,8 @@ vpn:
   enabled: true
 
 scraper:
-  min_delay: 8
-  max_delay: 15
+  min_delay: 2
+  max_delay: 4
   # HTTP timeouts (seconds). request_timeout is total; or set connect + read for more control.
   # Slow VPN paths often need >90s for large TCDB team pages.
   request_timeout: 120
@@ -28,4 +28,4 @@ scraper:
 
 storage:
   db_path: "./data/phillies.db"
-  image_path: "./data/images/"
+  image_path: "/mnt/phillies-images"

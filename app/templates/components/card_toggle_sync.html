@@ -1,0 +1,4 @@
+{% from "components/card_binder_cell.html" import card_binder_cell %}
+{% set set_name = card.card_set.full_name if card.card_set else '' %}
+{% include "components/card_row.html" %}
+{{ card_binder_cell(card, oob=true) }}

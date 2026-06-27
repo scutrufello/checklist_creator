@@ -15,9 +15,13 @@ venv/
 
 # Local runtime data (do not publish)
 data/*.db
+data/*.db-shm
+data/*.db-wal
 data/*.log
 data/scrape_checkpoint.json
+data/*_checkpoint.json
 data/images/
+data/prototype/
 
 # Secrets (OpenVPN user/pass)
 vpn/credentials.txt

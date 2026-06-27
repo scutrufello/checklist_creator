@@ -3,34 +3,84 @@
 {% block title %}Phillies Cards Checklist{% endblock %}
 
 {% block content %}
-<div class="text-center mb-8">
+<div class="text-center mb-6 sm:mb-8">
     <h1 class="text-3xl sm:text-4xl font-bold text-phillies-blue mb-2">Philadelphia Phillies</h1>
     <p class="text-lg text-base-content/70">Card Collection Checklist</p>
 </div>
 
 {% if years %}
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+<div class="mb-4 sm:mb-5" data-year-filter-wrap>
+    <label class="input input-bordered flex items-center gap-2 w-full max-w-md mx-auto sm:mx-0 bg-base-100 shadow-sm">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 text-base-content/45" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+        <input type="search"
+               data-year-filter
+               class="grow min-w-0"
+               placeholder="Filter years… e.g. 1957"
+               inputmode="numeric"
+               autocomplete="off"
+               spellcheck="false"
+               aria-label="Filter years">
+    </label>
+    <p class="hidden text-sm text-center sm:text-left text-base-content/55 mt-2" data-year-filter-empty>
+        No years match your filter.
+    </p>
+</div>
+
+<div class="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4" data-year-grid>
     {% for y in years %}
-    <a href="/year/{{ y.year }}" class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow border border-base-200 hover:border-phillies-red/30">
-        <div class="card-body p-5">
-            <div class="flex items-center justify-between">
-                <h2 class="card-title text-2xl font-bold text-phillies-blue">{{ y.year }}</h2>
-                <div class="badge badge-lg {% if y.owned_count == y.card_count and y.card_count > 0 %}badge-success{% else %}badge-ghost{% endif %}">
+    <a href="/year/{{ y.year }}"
+       data-year-card
+       data-year="{{ y.year }}"
+       class="card bg-base-100 shadow-md hover:shadow-xl transition-shadow border border-base-200 hover:border-phillies-red/30">
+        <div class="card-body p-3.5 sm:p-5">
+            <div class="flex items-center justify-between gap-1">
+                <h2 class="card-title text-xl sm:text-2xl font-bold text-phillies-blue">{{ y.year }}</h2>
+                <div class="badge badge-sm sm:badge-lg shrink-0 {% if y.owned_count == y.card_count and y.card_count > 0 %}badge-success{% else %}badge-ghost{% endif %}">
                     {{ y.owned_count }}/{{ y.card_count }}
                 </div>
             </div>
-            <p class="text-sm text-base-content/60">{{ y.set_count }} set{{ 's' if y.set_count != 1 else '' }}</p>
+            <p class="text-xs sm:text-sm text-base-content/60">{{ y.set_count }} set{{ 's' if y.set_count != 1 else '' }}</p>
             {% if y.card_count > 0 %}
-            <div class="w-full bg-base-200 rounded-full h-2.5 mt-2">
-                <div class="bg-phillies-red h-2.5 rounded-full progress-fill"
+            <div class="w-full bg-base-200 rounded-full h-2 sm:h-2.5 mt-1.5 sm:mt-2">
+                <div class="bg-phillies-red h-2 sm:h-2.5 rounded-full progress-fill"
                      style="width: {{ (y.owned_count / y.card_count * 100)|round(1) }}%"></div>
             </div>
-            <p class="text-xs text-base-content/50 mt-1">{{ (y.owned_count / y.card_count * 100)|round(1) }}% complete</p>
+            <p class="text-[10px] sm:text-xs text-base-content/50 mt-1">{{ (y.owned_count / y.card_count * 100)|round(1) }}%</p>
             {% endif %}
         </div>
     </a>
     {% endfor %}
 </div>
+
+<script>
+(function () {
+    var input = document.querySelector("[data-year-filter]");
+    var wrap = document.querySelector("[data-year-filter-wrap]");
+    if (!input || !wrap) return;
+
+    var cards = document.querySelectorAll("[data-year-card]");
+    var emptyEl = wrap.querySelector("[data-year-filter-empty]");
+
+    function applyFilter() {
+        var q = (input.value || "").trim();
+        var visible = 0;
+        cards.forEach(function (card) {
+            var year = card.getAttribute("data-year") || "";
+            var show = !q || year.indexOf(q) !== -1;
+            card.classList.toggle("hidden", !show);
+            if (show) visible += 1;
+        });
+        if (emptyEl) {
+            emptyEl.classList.toggle("hidden", visible > 0 || !q);
+        }
+    }
+
+    input.addEventListener("input", applyFilter);
+    input.addEventListener("search", applyFilter);
+})();
+</script>
 {% else %}
 <div class="text-center py-16">
     <div class="text-6xl mb-4 text-base-content/20">

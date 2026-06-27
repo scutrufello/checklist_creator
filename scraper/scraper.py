@@ -12,6 +12,7 @@ import requests
 from app.database import get_session, init_db, load_config
 from app.models import Card, CardSet, strip_redundant_variant_tag_prose
 from scraper.hierarchy import build_hierarchy, classify_set_type, split_set_name
+from scripts.resolve_parallel_relationships import resolve_relationships
 from scraper.page_parser import ParsedCard, parse_team_page, parse_years_available
 from scraper.vpn_manager import VPNManager
 
@@ -137,6 +138,7 @@ class TCDBScraper:
         try:
             for year in years:
                 build_hierarchy(session, year)
+                resolve_relationships(session, year)
         finally:
             session.close()
 

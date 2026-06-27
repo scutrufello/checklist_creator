@@ -112,6 +112,7 @@ class Card(Base):
     raw_tags_text = Column(String, nullable=True)
     tags = Column(Text, nullable=True)  # JSON array stored as text
     owned = Column(Boolean, default=False, nullable=False)
+    wants_upgrade = Column(Boolean, default=False, nullable=False)
     # If False, card still shows in checklist but is omitted from completion % (e.g. cosmetic print variants).
     counts_toward_completion = Column(Boolean, default=True, nullable=False)
 
@@ -171,6 +172,35 @@ class Card(Base):
     def variant_display(self):
         """Human-readable variation line without redundant SP/VAR prefix noise."""
         return strip_redundant_variant_tag_prose(self.variant or "")
+
+    @staticmethod
+    def _resolved_image_url(local: str | None, remote: str | None) -> str | None:
+        if local:
+            return f"/card-images/{local.lstrip('/')}"
+        return remote
+
+    @property
+    def front_image_url(self) -> str | None:
+        """Front scan URL for display (local cache preferred)."""
+        return self._resolved_image_url(self.image_front_local, self.image_front_url)
+
+    @property
+    def back_image_url(self) -> str | None:
+        """Back scan URL for display (local cache preferred)."""
+        return self._resolved_image_url(self.image_back_local, self.image_back_url)
+
+    @property
+    def thumbnail_url(self) -> str | None:
+        """Front thumbnail (alias for front_image_url)."""
+        return self.front_image_url
+
+    @property
+    def has_thumbnail(self) -> bool:
+        return bool(self.front_image_url)
+
+    @property
+    def has_back_image(self) -> bool:
+        return bool(self.back_image_url)
 
     def __repr__(self):
         return f"<Card #{self.number} {self.player_name}>"

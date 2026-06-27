@@ -1,0 +1,58 @@
+{% from "components/card_binder_cell.html" import card_binder_cell %}
+{% from "components/card_image_macros.html" import card_table_images %}
+
+{% macro render_card_checklist(cards, card_set=none) %}
+{% set set_name = card_set.full_name if card_set else '' %}
+{% if cards %}
+<div data-checklist-views data-missing-only-table{% if set_name %} data-set-name="{{ set_name }}"{% endif %}>
+    <p class="hidden text-sm text-base-content/60 py-6 text-center border border-dashed border-base-300 rounded-lg mb-3" data-missing-only-empty>
+        All cards collected in this set.
+    </p>
+    <div class="text-xs text-base-content/50 mb-1 hidden" data-missing-only-count></div>
+
+    <div data-checklist-table class="overflow-x-auto">
+        <table class="table table-sm w-full">
+            <thead>
+                <tr class="bg-phillies-blue text-white">
+                    <th class="w-10 text-center rounded-tl-lg">Own</th>
+                    <th class="w-10 text-center" title="Want better condition">Upg</th>
+                    <th class="hidden md:table-cell w-[6.5rem]">Img</th>
+                    <th class="w-16">#</th>
+                    <th>Player</th>
+                    <th class="hidden sm:table-cell">Tags</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for card in cards %}
+                {% include "components/card_row.html" %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div data-checklist-binder class="space-y-6">
+        {% for card in cards %}
+        {% if loop.index0 % 9 == 0 %}
+        {% if not loop.first %}</div></div>{% endif %}
+        <div class="binder-page" data-binder-page>
+            <div class="text-xs text-base-content/45 text-center mb-2 font-medium tracking-wide">Page {{ (loop.index0 // 9) + 1 }}</div>
+            <div class="grid grid-cols-3 gap-2 sm:gap-3">
+        {% endif %}
+        {{ card_binder_cell(card) }}
+        {% if loop.last %}
+                {% set remainder = cards|length % 9 %}
+                {% if remainder != 0 %}
+                    {% for i in range(9 - remainder) %}
+                    <div class="card-binder-cell-empty rounded-lg border border-dashed border-base-300/80 bg-base-200/20 min-h-[10rem] sm:min-h-[12rem]" aria-hidden="true"></div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+</div>
+{% else %}
+<div class="text-sm text-base-content/60 mt-3">No cards in this set.</div>
+{% endif %}
+{% endmacro %}

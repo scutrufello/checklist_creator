@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class VPNManager:
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, *, start_index: int | None = None):
         vpn_cfg = config["vpn"]
         self.auth_file = os.path.abspath(vpn_cfg["auth_file"])
         self.config_dir = os.path.abspath(vpn_cfg["config_dir"])
@@ -19,7 +19,7 @@ class VPNManager:
         self.disconnect_kill_timeout = vpn_cfg.get("disconnect_kill_timeout", 45)
         self.log_public_ip_every_n_requests = vpn_cfg.get("log_public_ip_every_n_requests", 25)
         self.process = None
-        self.current_index = 0
+        self.current_index = start_index if start_index is not None else 0
         self.request_count = 0
         self.original_ip = None
         self.current_public_ip: str | None = None
@@ -29,6 +29,13 @@ class VPNManager:
 
         if not self.configs:
             logger.warning("No .ovpn files found in %s — VPN disabled", self.config_dir)
+        elif self.current_index >= len(self.configs):
+            logger.warning(
+                "VPN start index %d out of range (%d configs); using 0",
+                self.current_index,
+                len(self.configs),
+            )
+            self.current_index = 0
 
     @property
     def enabled(self):

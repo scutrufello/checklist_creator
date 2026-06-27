@@ -1,6 +1,7 @@
 import os
 import sqlite3
-from sqlalchemy import create_engine
+import time
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
 import yaml
@@ -22,8 +23,22 @@ def get_engine():
         config = load_config()
         db_path = config["storage"]["db_path"]
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        _engine = create_engine(f"sqlite:///{db_path}", echo=False)
+        _engine = create_engine(
+            f"sqlite:///{db_path}",
+            echo=False,
+            connect_args={"timeout": 60},
+        )
+        _configure_sqlite(_engine)
     return _engine
+
+
+def _configure_sqlite(engine) -> None:
+    @event.listens_for(engine, "connect")
+    def _set_sqlite_pragma(dbapi_connection, _connection_record) -> None:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=60000")
+        cursor.close()
 
 def get_session():
     global _SessionLocal
@@ -106,6 +121,24 @@ def _ensure_card_columns():
         cur.execute(
             "ALTER TABLE cards ADD COLUMN counts_toward_completion BOOLEAN NOT NULL DEFAULT 1"
         )
+
+    if "wants_upgrade" not in existing_columns:
+        for attempt in range(12):
+            try:
+                cur.execute(
+                    "ALTER TABLE cards ADD COLUMN wants_upgrade BOOLEAN NOT NULL DEFAULT 0"
+                )
+                break
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower() or attempt >= 11:
+                    raise
+                time.sleep(2)
+                conn.rollback()
+                cur = conn.cursor()
+                cur.execute("PRAGMA table_info(cards)")
+                existing_columns = {row[1] for row in cur.fetchall()}
+                if "wants_upgrade" in existing_columns:
+                    break
 
     conn.commit()
     conn.close()

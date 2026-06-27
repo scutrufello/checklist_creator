@@ -1,0 +1,17 @@
+{% macro view_mode_toggle() %}
+<div class="inline-flex rounded-lg border border-base-300 overflow-hidden text-xs" role="group" aria-label="Checklist view">
+    <button type="button"
+            class="btn btn-xs btn-ghost rounded-none px-2 sm:px-3 border-0 min-h-7 h-7 view-mode-btn"
+            data-view-mode-toggle="table"
+            aria-pressed="true">
+        Table
+    </button>
+    <button type="button"
+            class="btn btn-xs btn-ghost rounded-none px-2 sm:px-3 border-0 min-h-7 h-7 view-mode-btn"
+            data-view-mode-toggle="binder"
+            aria-pressed="false"
+            title="9-pocket binder layout">
+        Binder
+    </button>
+</div>
+{% endmacro %}
