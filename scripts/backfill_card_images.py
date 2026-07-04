@@ -15,6 +15,7 @@ from sqlalchemy import func
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database import get_session, load_config  # noqa: E402
+from app.image_scan_status import infer_scan_status_from_stored_urls  # noqa: E402
 from app.models import Card, CardSet  # noqa: E402
 from scraper.card_images import backfill_card_image  # noqa: E402
 from scraper.vpn_manager import VPNManager  # noqa: E402
@@ -205,7 +206,7 @@ def main() -> None:
 
     vpn = VPNManager(config)
     if args.no_vpn:
-        vpn.enabled = False
+        vpn._enabled_config = False
     if vpn.enabled:
         try:
             vpn.connect()
@@ -290,6 +291,12 @@ def main() -> None:
                 totals["skipped_checkpoint"] += 1
                 continue
             if not args.force and (card.image_front_url or card.image_back_url):
+                if card.image_scan_status is None:
+                    inferred = infer_scan_status_from_stored_urls(card)
+                    if inferred:
+                        card.image_scan_status = inferred
+                        if card.image_url_checked_at is None:
+                            card.image_url_checked_at = datetime.now(timezone.utc).isoformat()
                 totals["skipped_done"] += 1
                 processed_ids.add(card.id)
                 continue

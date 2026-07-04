@@ -52,6 +52,7 @@ def init_db():
     Base.metadata.create_all(engine)
     _ensure_card_set_columns()
     _ensure_card_columns()
+    _ensure_card_image_indexes()
     _ensure_cards_indexes()
 
 
@@ -140,6 +141,50 @@ def _ensure_card_columns():
                 if "wants_upgrade" in existing_columns:
                     break
 
+    image_columns = {
+        "image_scan_status": "VARCHAR",
+        "image_url_checked_at": "VARCHAR",
+        "user_image_front_local": "VARCHAR",
+        "user_image_back_local": "VARCHAR",
+    }
+    for col, ddl in image_columns.items():
+        if col not in existing_columns:
+            for attempt in range(12):
+                try:
+                    cur.execute(f"ALTER TABLE cards ADD COLUMN {col} {ddl}")
+                    break
+                except sqlite3.OperationalError as exc:
+                    if "locked" not in str(exc).lower() or attempt >= 11:
+                        raise
+                    time.sleep(2)
+                    conn.rollback()
+                    cur = conn.cursor()
+                    cur.execute("PRAGMA table_info(cards)")
+                    existing_columns = {row[1] for row in cur.fetchall()}
+                    if col in existing_columns:
+                        break
+
+    conn.commit()
+    conn.close()
+
+
+def _ensure_card_image_indexes():
+    """Indexes for recurring image URL / download sync queries."""
+    config = load_config()
+    db_path = config["storage"]["db_path"]
+    if not os.path.isabs(db_path):
+        db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), db_path)
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS ix_cards_image_url_checked_at "
+        "ON cards(image_url_checked_at)"
+    )
+    cur.execute(
+        "CREATE INDEX IF NOT EXISTS ix_cards_image_scan_status "
+        "ON cards(image_scan_status)"
+    )
     conn.commit()
     conn.close()
 

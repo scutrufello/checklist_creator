@@ -1,3 +1,4 @@
+{% from "components/user_photo_button.html" import user_photo_button %}
 {% macro card_binder_cell(card, oob=false) %}
 <div id="binder-card-{{ card.id }}"
      class="card-binder-cell card-row flex flex-col rounded-lg border border-base-300 bg-base-100 p-1.5 sm:p-2 shadow-sm hover:shadow transition-shadow {% if card.owned %}card-row-owned{% endif %}{% if card.owned and card.wants_upgrade %} card-row-wants-upgrade{% endif %}"
@@ -28,6 +29,12 @@
         {% else %}
         <span class="absolute inset-0 flex items-center justify-center text-[10px] text-base-content/40 px-1 text-center">No scan</span>
         {% endif %}
+        {% if card.has_user_front_image %}
+        <span class="absolute top-0.5 left-0.5 badge badge-xs badge-primary scale-90 origin-top-left shadow-sm" title="Your photo">Yours</span>
+        {% endif %}
+        <div class="absolute top-0.5 right-0.5 z-10">
+            {{ user_photo_button(card) }}
+        </div>
     </div>
     <div class="text-center min-w-0 flex-1 px-0.5">
         <div class="font-mono text-xs text-base-content/70">#{{ card.number }}</div>

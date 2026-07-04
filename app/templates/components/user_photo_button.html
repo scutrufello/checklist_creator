@@ -1,0 +1,24 @@
+{% macro user_photo_button(card) %}
+{% set can_front = card.has_user_front_image or card.wants_upgrade or not card.tcdb_front_image_url %}
+{% set can_back = card.has_user_back_image or card.wants_upgrade or not card.tcdb_back_image_url %}
+{% if user_card_photos_enabled and (can_front or can_back) %}
+{% set default_side = 'back' if (can_back and not can_front) or (card.has_user_front_image and can_back and not card.has_user_back_image) else 'front' %}
+<button type="button"
+        class="btn btn-xs btn-circle btn-ghost bg-base-100/90 border border-base-300/80 shadow-sm hover:bg-base-200 {{ class|default('') }}"
+        data-user-photo-open
+        data-card-id="{{ card.id }}"
+        data-card-label="#{{ card.number }} {{ card.player_name }}"
+        data-has-user-front="{{ 'true' if card.has_user_front_image else 'false' }}"
+        data-has-user-back="{{ 'true' if card.has_user_back_image else 'false' }}"
+        data-can-front="{{ 'true' if can_front else 'false' }}"
+        data-can-back="{{ 'true' if can_back else 'false' }}"
+        data-default-side="{{ default_side }}"
+        title="Add or edit your card photos"
+        aria-label="Add or edit card photos">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+    </svg>
+</button>
+{% endif %}
+{% endmacro %}

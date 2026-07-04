@@ -20,6 +20,11 @@ data/*.db-wal
 data/*.log
 data/scrape_checkpoint.json
 data/*_checkpoint.json
+data/image_sync_*_cursor.json
+data/era_backfill_queue.log
+data/era_download_queue.log
+data/image_backfill_*.pid
+data/image_download_*.pid
 data/images/
 data/prototype/
 

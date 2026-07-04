@@ -109,6 +109,11 @@ class Card(Base):
     image_back_url = Column(String, nullable=True)
     image_front_local = Column(String, nullable=True)
     image_back_local = Column(String, nullable=True)
+    user_image_front_local = Column(String, nullable=True)
+    user_image_back_local = Column(String, nullable=True)
+    # ViewCard image pipeline: when we last fetched URLs; none|partial|full (NULL = never checked).
+    image_url_checked_at = Column(String, nullable=True)
+    image_scan_status = Column(String, nullable=True)
     raw_tags_text = Column(String, nullable=True)
     tags = Column(Text, nullable=True)  # JSON array stored as text
     owned = Column(Boolean, default=False, nullable=False)
@@ -181,12 +186,32 @@ class Card(Base):
 
     @property
     def front_image_url(self) -> str | None:
-        """Front scan URL for display (local cache preferred)."""
+        """Best front image for display (user photo > TCDB cache > TCDB URL)."""
+        if self.user_image_front_local:
+            return self._resolved_image_url(self.user_image_front_local, None)
         return self._resolved_image_url(self.image_front_local, self.image_front_url)
 
     @property
     def back_image_url(self) -> str | None:
-        """Back scan URL for display (local cache preferred)."""
+        """Best back image for display (user photo > TCDB cache > TCDB URL)."""
+        if self.user_image_back_local:
+            return self._resolved_image_url(self.user_image_back_local, None)
+        return self._resolved_image_url(self.image_back_local, self.image_back_url)
+
+    @property
+    def has_user_front_image(self) -> bool:
+        return bool(self.user_image_front_local)
+
+    @property
+    def has_user_back_image(self) -> bool:
+        return bool(self.user_image_back_local)
+
+    @property
+    def tcdb_front_image_url(self) -> str | None:
+        return self._resolved_image_url(self.image_front_local, self.image_front_url)
+
+    @property
+    def tcdb_back_image_url(self) -> str | None:
         return self._resolved_image_url(self.image_back_local, self.image_back_url)
 
     @property
@@ -201,6 +226,15 @@ class Card(Base):
     @property
     def has_back_image(self) -> bool:
         return bool(self.back_image_url)
+
+    @property
+    def needs_image_url_sync(self) -> bool:
+        """True when ViewCard should be fetched for image URLs (metadata-only hint)."""
+        if not self.tcdb_url:
+            return False
+        if self.image_front_url or self.image_back_url:
+            return False
+        return True
 
     def __repr__(self):
         return f"<Card #{self.number} {self.player_name}>"

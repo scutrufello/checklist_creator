@@ -1,4 +1,5 @@
 {% from "components/card_image_macros.html" import card_table_images %}
+{% from "components/user_photo_button.html" import user_photo_button %}
 <tr id="card-{{ card.id }}" class="card-row hover:bg-base-200/50 transition-colors {% if card.owned %}card-row-owned{% endif %}{% if card.owned and card.wants_upgrade %} card-row-wants-upgrade{% endif %}" data-owned="{{ 'true' if card.owned else 'false' }}">
     <td class="text-center">
         <input type="checkbox"
@@ -23,7 +24,10 @@
         />
     </td>
     <td class="hidden md:table-cell w-[6.5rem] p-1">
-        {{ card_table_images(card, set_name|default('')) }}
+        <div class="flex items-center gap-1">
+            {{ card_table_images(card, set_name|default('')) }}
+            {{ user_photo_button(card) }}
+        </div>
     </td>
     <td class="font-mono text-sm card-number">{{ card.number }}</td>
     <td class="font-medium">
@@ -34,6 +38,9 @@
         {% if card.owned and card.wants_upgrade %}
         <div class="text-xs text-warning mt-0.5">Upgrade wanted</div>
         {% endif %}
+        <div class="mt-1 md:hidden">
+            {{ user_photo_button(card) }}
+        </div>
     </td>
     <td class="hidden sm:table-cell">
         {% if card.tags_list %}

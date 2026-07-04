@@ -29,3 +29,7 @@ scraper:
 storage:
   db_path: "./data/phillies.db"
   image_path: "/mnt/phillies-images"
+
+features:
+  # User-uploaded card photos (camera + auto-crop). Set false to hide UI and disable API.
+  user_card_photos: true

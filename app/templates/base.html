@@ -139,6 +139,18 @@
         @media (max-width: 640px) {
             .card-number { min-width: 3rem; }
         }
+        #user-photo-crop-wrap {
+            max-height: min(52vh, 480px);
+        }
+        #user-photo-crop-wrap img {
+            max-width: 100%;
+            display: block;
+        }
+        #user-photo-guide-frame {
+            aspect-ratio: 5 / 7;
+            border: 2px dashed rgb(0 45 114 / 0.55);
+            border-radius: 0.5rem;
+        }
     </style>
 </head>
 <body class="min-h-screen text-base-content" hx-boost="true">
@@ -244,6 +256,297 @@
             </div>
         </div>
     </div>
+
+    {% if user_card_photos_enabled %}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css">
+    <dialog id="user-photo-modal" class="modal">
+        <div class="modal-box w-11/12 max-w-lg p-0 overflow-hidden">
+            <div class="px-4 py-3 border-b border-base-300 flex items-center justify-between gap-2 bg-base-100">
+                <div>
+                    <h3 class="font-bold text-base" id="user-photo-title">Add card photo</h3>
+                    <p class="text-xs text-base-content/60 mt-0.5" id="user-photo-subtitle">Align the card in the frame, then adjust the crop.</p>
+                </div>
+                <button type="button" class="btn btn-sm btn-circle btn-ghost" data-user-photo-close aria-label="Close">✕</button>
+            </div>
+            <div class="p-4 space-y-4" id="user-photo-step-pick">
+                <div class="join w-full" role="tablist" aria-label="Card side">
+                    <button type="button" class="btn btn-sm join-item flex-1 btn-active" data-user-photo-side="front" aria-pressed="true">Front</button>
+                    <button type="button" class="btn btn-sm join-item flex-1" data-user-photo-side="back" aria-pressed="false">Back</button>
+                </div>
+                <div id="user-photo-guide-frame" class="mx-auto w-full max-w-[220px] flex items-center justify-center bg-base-200/70 text-center text-sm text-base-content/55 px-4">
+                    Place card here when taking photo
+                </div>
+                <label class="btn btn-primary btn-block gap-2 cursor-pointer">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                    Take or choose photo
+                    <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" class="hidden" id="user-photo-file-input">
+                </label>
+                <p class="text-[11px] text-base-content/45 text-center">Tip: fill the dashed frame; we'll auto-crop to card edges.</p>
+                <div class="hidden" id="user-photo-existing-wrap">
+                    <button type="button" class="btn btn-outline btn-error btn-sm w-full" id="user-photo-delete-btn">Remove your photo</button>
+                </div>
+            </div>
+            <div class="p-4 space-y-3 hidden" id="user-photo-step-crop">
+                <div id="user-photo-crop-wrap" class="w-full bg-base-200 rounded-lg overflow-hidden border border-base-300">
+                    <img id="user-photo-crop-img" alt="Crop preview">
+                </div>
+                <p class="text-xs text-base-content/55 text-center" id="user-photo-crop-hint">Drag handles to adjust · 5:7 card ratio locked</p>
+                <div class="flex gap-2">
+                    <button type="button" class="btn btn-ghost btn-sm flex-1" data-user-photo-back>Back</button>
+                    <button type="button" class="btn btn-primary btn-sm flex-1" id="user-photo-confirm-btn">Save photo</button>
+                </div>
+            </div>
+            <div class="hidden px-4 pb-4" id="user-photo-loading">
+                <span class="loading loading-spinner loading-md mx-auto block"></span>
+            </div>
+        </div>
+        <form method="dialog" class="modal-backdrop bg-black/50">
+            <button type="submit" data-user-photo-close aria-label="Close">close</button>
+        </form>
+    </dialog>
+    <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
+    <script>
+        (function () {
+            var modal = document.getElementById("user-photo-modal");
+            if (!modal) return;
+
+            var titleEl = document.getElementById("user-photo-title");
+            var stepPick = document.getElementById("user-photo-step-pick");
+            var stepCrop = document.getElementById("user-photo-step-crop");
+            var loadingEl = document.getElementById("user-photo-loading");
+            var fileInput = document.getElementById("user-photo-file-input");
+            var cropImg = document.getElementById("user-photo-crop-img");
+            var confirmBtn = document.getElementById("user-photo-confirm-btn");
+            var deleteBtn = document.getElementById("user-photo-delete-btn");
+            var existingWrap = document.getElementById("user-photo-existing-wrap");
+            var cropHint = document.getElementById("user-photo-crop-hint");
+            var sideTabButtons = modal.querySelectorAll("[data-user-photo-side]");
+
+            var state = {
+                cardId: null,
+                side: "front",
+                cropper: null,
+                uploading: false,
+                hasUserFront: false,
+                hasUserBack: false,
+                canFront: true,
+                canBack: true,
+            };
+
+            function sideLabel(side) {
+                return side === "back" ? "back" : "front";
+            }
+
+            function updateSideUi() {
+                sideTabButtons.forEach(function (btn) {
+                    var tabSide = btn.getAttribute("data-user-photo-side");
+                    var active = tabSide === state.side;
+                    var allowed = tabSide === "back" ? state.canBack : state.canFront;
+                    btn.classList.toggle("btn-active", active);
+                    btn.setAttribute("aria-pressed", active ? "true" : "false");
+                    btn.disabled = !allowed;
+                    btn.classList.toggle("btn-disabled", !allowed);
+                });
+                var hasPhoto = state.side === "back" ? state.hasUserBack : state.hasUserFront;
+                titleEl.textContent = hasPhoto ? ("Edit " + sideLabel(state.side) + " photo") : ("Add " + sideLabel(state.side) + " photo");
+                deleteBtn.textContent = "Remove " + sideLabel(state.side) + " photo";
+                existingWrap.classList.toggle("hidden", !hasPhoto);
+            }
+
+            function setSide(side) {
+                side = side === "back" ? "back" : "front";
+                if (side === "back" && !state.canBack) side = "front";
+                if (side === "front" && !state.canFront && state.canBack) side = "back";
+                state.side = side;
+                updateSideUi();
+            }
+
+            function destroyCropperInstance() {
+                if (state.cropper) {
+                    state.cropper.destroy();
+                    state.cropper = null;
+                }
+            }
+
+            function resetCropImage() {
+                destroyCropperInstance();
+                cropImg.onload = null;
+                cropImg.removeAttribute("src");
+            }
+
+            function showLoading(on) {
+                loadingEl.classList.toggle("hidden", !on);
+                stepPick.classList.toggle("hidden", on);
+                if (on) {
+                    stepCrop.classList.add("hidden");
+                }
+            }
+
+            function closeModal() {
+                resetCropImage();
+                state.cardId = null;
+                state.uploading = false;
+                stepCrop.classList.add("hidden");
+                stepPick.classList.remove("hidden");
+                showLoading(false);
+                fileInput.value = "";
+                modal.close();
+            }
+
+            function applyCardSyncHtml(html) {
+                var tpl = document.createElement("template");
+                tpl.innerHTML = html.trim();
+                tpl.content.querySelectorAll("[id]").forEach(function (node) {
+                    var existing = document.getElementById(node.id);
+                    if (existing) existing.replaceWith(node);
+                });
+            }
+
+            function openModal(btn) {
+                state.cardId = btn.getAttribute("data-card-id");
+                state.hasUserFront = btn.getAttribute("data-has-user-front") === "true";
+                state.hasUserBack = btn.getAttribute("data-has-user-back") === "true";
+                state.canFront = btn.getAttribute("data-can-front") !== "false";
+                state.canBack = btn.getAttribute("data-can-back") !== "false";
+                var defaultSide = btn.getAttribute("data-default-side") || "front";
+                setSide(defaultSide);
+                resetCropImage();
+                stepCrop.classList.add("hidden");
+                stepPick.classList.remove("hidden");
+                showLoading(false);
+                fileInput.value = "";
+                modal.showModal();
+            }
+
+            function showCropStep(originalUrl, crop, autoDetected) {
+                stepPick.classList.add("hidden");
+                stepCrop.classList.remove("hidden");
+                cropHint.textContent = autoDetected
+                    ? "Auto-detected edges — drag to fine-tune"
+                    : "Adjust crop box to the card";
+                cropImg.src = originalUrl + "?t=" + Date.now();
+                cropImg.onload = function () {
+                    cropImg.onload = null;
+                    destroyCropperInstance();
+                    state.cropper = new Cropper(cropImg, {
+                        aspectRatio: 5 / 7,
+                        viewMode: 1,
+                        autoCropArea: 0.92,
+                        responsive: true,
+                        background: false,
+                        data: crop,
+                    });
+                };
+            }
+
+            function uploadFile(file) {
+                if (!state.cardId || state.uploading) return;
+                state.uploading = true;
+                showLoading(true);
+                var body = new FormData();
+                body.append("file", file);
+                body.append("side", state.side);
+                fetch("/api/card/" + state.cardId + "/user-photo/upload", { method: "POST", body: body })
+                    .then(function (r) {
+                        if (!r.ok) {
+                            return r.json().then(function (j) { throw new Error(j.detail || "Upload failed"); });
+                        }
+                        return r.json();
+                    })
+                    .then(function (data) {
+                        state.uploading = false;
+                        showLoading(false);
+                        showCropStep(data.original_url, data.crop, data.auto_detected);
+                    })
+                    .catch(function (err) {
+                        state.uploading = false;
+                        showLoading(false);
+                        alert(err.message || "Upload failed");
+                    });
+            }
+
+            document.addEventListener("click", function (e) {
+                var openBtn = e.target.closest("[data-user-photo-open]");
+                if (openBtn) {
+                    e.preventDefault();
+                    openModal(openBtn);
+                    return;
+                }
+                var sideBtn = e.target.closest("[data-user-photo-side]");
+                if (sideBtn && stepPick && !stepPick.classList.contains("hidden")) {
+                    e.preventDefault();
+                    setSide(sideBtn.getAttribute("data-user-photo-side"));
+                    return;
+                }
+                if (e.target.closest("[data-user-photo-close]")) {
+                    e.preventDefault();
+                    closeModal();
+                }
+                if (e.target.closest("[data-user-photo-back]")) {
+                    e.preventDefault();
+                    resetCropImage();
+                    stepCrop.classList.add("hidden");
+                    stepPick.classList.remove("hidden");
+                }
+            });
+
+            fileInput.addEventListener("change", function () {
+                var file = fileInput.files && fileInput.files[0];
+                if (file) uploadFile(file);
+            });
+
+            confirmBtn.addEventListener("click", function () {
+                if (!state.cropper || !state.cardId) return;
+                var data = state.cropper.getData(true);
+                var body = new FormData();
+                body.append("crop_x", String(data.x));
+                body.append("crop_y", String(data.y));
+                body.append("crop_width", String(data.width));
+                body.append("crop_height", String(data.height));
+                body.append("side", state.side);
+                confirmBtn.disabled = true;
+                fetch("/api/card/" + state.cardId + "/user-photo/confirm", { method: "POST", body: body })
+                    .then(function (r) {
+                        if (!r.ok) return r.text().then(function (t) { throw new Error(t || "Save failed"); });
+                        return r.text();
+                    })
+                    .then(function (html) {
+                        applyCardSyncHtml(html);
+                        closeModal();
+                    })
+                    .catch(function (err) {
+                        alert(err.message || "Save failed");
+                    })
+                    .finally(function () {
+                        confirmBtn.disabled = false;
+                    });
+            });
+
+            deleteBtn.addEventListener("click", function () {
+                if (!state.cardId || !confirm("Remove your " + sideLabel(state.side) + " photo for this card?")) return;
+                deleteBtn.disabled = true;
+                fetch("/api/card/" + state.cardId + "/user-photo?side=" + encodeURIComponent(state.side), { method: "DELETE" })
+                    .then(function (r) {
+                        if (!r.ok) return r.text().then(function (t) { throw new Error(t || "Delete failed"); });
+                        return r.text();
+                    })
+                    .then(function (html) {
+                        applyCardSyncHtml(html);
+                        closeModal();
+                    })
+                    .catch(function (err) {
+                        alert(err.message || "Delete failed");
+                    })
+                    .finally(function () {
+                        deleteBtn.disabled = false;
+                    });
+            });
+        })();
+    </script>
+    {% endif %}
 
     <script>
         (function () {

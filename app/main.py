@@ -3,7 +3,7 @@ from collections import defaultdict
 import re
 from urllib.parse import urlencode
 
-from fastapi import FastAPI, Request, Depends, Form
+from fastapi import FastAPI, Request, Depends, Form, File, UploadFile, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -12,6 +12,13 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_session, init_db, load_config
 from app.models import Card, CardSet
+from app.user_card_images import (
+    CropBox,
+    apply_crop_from_original,
+    delete_user_photo,
+    process_upload,
+    user_photos_enabled,
+)
 from app.product_clusters import (
     attach_parallel_partitions,
     build_segment_keys,
@@ -53,6 +60,17 @@ if not os.path.isabs(_image_dir):
     _image_dir = os.path.normpath(os.path.join(os.path.dirname(BASE_DIR), _image_dir))
 os.makedirs(_image_dir, exist_ok=True)
 app.mount("/card-images", StaticFiles(directory=_image_dir), name="card-images")
+
+_USER_PHOTOS_ENABLED = user_photos_enabled(_config)
+_MAX_USER_PHOTO_BYTES = 15 * 1024 * 1024
+_ALLOWED_USER_PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp", "image/jpg"}
+
+
+def _template_globals():
+    return {"user_card_photos_enabled": _USER_PHOTOS_ENABLED}
+
+
+templates.env.globals.update(_template_globals())
 
 
 def get_db():
@@ -1070,6 +1088,153 @@ def toggle_card_upgrade(request: Request, card_id: int, db: Session = Depends(ge
         "request": request,
         "card": card,
     })
+
+
+def _require_user_photos():
+    if not _USER_PHOTOS_ENABLED:
+        raise HTTPException(status_code=404, detail="User card photos are disabled")
+
+
+def _parse_photo_side(side: str) -> str:
+    s = (side or "front").strip().lower()
+    if s not in ("front", "back"):
+        raise HTTPException(status_code=400, detail="side must be 'front' or 'back'")
+    return s
+
+
+def _card_toggle_response(request: Request, card: Card):
+    return templates.TemplateResponse("components/card_toggle_sync.html", {
+        "request": request,
+        "card": card,
+    })
+
+
+@app.post("/api/card/{card_id}/user-photo/upload")
+async def upload_user_card_photo(
+    request: Request,
+    card_id: int,
+    file: UploadFile = File(...),
+    side: str = Form("front"),
+    db: Session = Depends(get_db),
+):
+    """Stage a photo, auto-detect card edges, return crop preview."""
+    _require_user_photos()
+    photo_side = _parse_photo_side(side)
+    card = (
+        db.query(Card)
+        .options(joinedload(Card.card_set))
+        .filter_by(id=card_id)
+        .first()
+    )
+    if not card:
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    content_type = (file.content_type or "").lower()
+    if content_type and content_type not in _ALLOWED_USER_PHOTO_TYPES:
+        raise HTTPException(status_code=400, detail="Use JPEG, PNG, or WebP")
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if len(data) > _MAX_USER_PHOTO_BYTES:
+        raise HTTPException(status_code=400, detail="File too large (max 15 MB)")
+
+    try:
+        result = process_upload(
+            data, _image_dir, card.card_set.tcdb_sid, card.id, photo_side
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Could not save image: {exc}") from exc
+
+    return {
+        "ok": True,
+        "side": photo_side,
+        "preview_url": f"/card-images/{result.preview_rel}",
+        "original_url": f"/card-images/{result.original_rel}",
+        "auto_detected": result.auto_detected,
+        "crop": result.suggested_crop.as_dict(),
+    }
+
+
+@app.post("/api/card/{card_id}/user-photo/confirm", response_class=HTMLResponse)
+def confirm_user_card_photo(
+    request: Request,
+    card_id: int,
+    crop_x: float = Form(...),
+    crop_y: float = Form(...),
+    crop_width: float = Form(...),
+    crop_height: float = Form(...),
+    side: str = Form("front"),
+    db: Session = Depends(get_db),
+):
+    """Apply manual crop and save as the card's user photo."""
+    _require_user_photos()
+    photo_side = _parse_photo_side(side)
+    card = (
+        db.query(Card)
+        .options(joinedload(Card.card_set))
+        .filter_by(id=card_id)
+        .first()
+    )
+    if not card:
+        return HTMLResponse("Card not found", status_code=404)
+
+    crop = CropBox(
+        x=int(round(crop_x)),
+        y=int(round(crop_y)),
+        width=max(1, int(round(crop_width))),
+        height=max(1, int(round(crop_height))),
+    )
+    try:
+        rel_path = apply_crop_from_original(
+            _image_dir, card.card_set.tcdb_sid, card.id, crop, photo_side
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        return HTMLResponse(str(exc), status_code=400)
+    except OSError as exc:
+        return HTMLResponse(f"Could not save image: {exc}", status_code=500)
+
+    if photo_side == "back":
+        card.user_image_back_local = rel_path
+    else:
+        card.user_image_front_local = rel_path
+    db.commit()
+    db.refresh(card)
+    return _card_toggle_response(request, card)
+
+
+@app.delete("/api/card/{card_id}/user-photo", response_class=HTMLResponse)
+def remove_user_card_photo(
+    request: Request,
+    card_id: int,
+    side: str = "front",
+    db: Session = Depends(get_db),
+):
+    """Remove user photo; TCDB scan shows again if present."""
+    _require_user_photos()
+    photo_side = _parse_photo_side(side)
+    card = (
+        db.query(Card)
+        .options(joinedload(Card.card_set))
+        .filter_by(id=card_id)
+        .first()
+    )
+    if not card:
+        return HTMLResponse("Card not found", status_code=404)
+
+    delete_user_photo(_image_dir, card.card_set.tcdb_sid, card.id, photo_side)
+    if photo_side == "back":
+        card.user_image_back_local = None
+    else:
+        card.user_image_front_local = None
+    db.commit()
+    db.refresh(card)
+    return _card_toggle_response(request, card)
+
+
+@app.get("/api/stats/{set_id}")
 def set_stats(set_id: int, db: Session = Depends(get_db)):
     """Get stats for a set (used for live counter updates)."""
     total = (

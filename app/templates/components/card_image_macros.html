@@ -12,6 +12,10 @@
      data-back-url="{{ card.back_image_url or '' }}"
      data-caption="{{ caption }}">
     {% if card.front_image_url %}
+    <div class="relative shrink-0">
+    {% if card.has_user_front_image %}
+    <span class="absolute top-0 left-0 badge badge-xs badge-primary scale-75 z-10" title="Your photo">Y</span>
+    {% endif %}
     <button type="button"
             class="block shrink-0 p-0 border-0 bg-transparent cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-phillies-blue/60"
             data-card-lightbox-open
@@ -24,10 +28,15 @@
              onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden')">
         {{ card_image_thumb_placeholder(title="Front unavailable", hidden=true) }}
     </button>
+    </div>
     {% else %}
     {{ card_image_thumb_placeholder() }}
     {% endif %}
     {% if card.back_image_url %}
+    <div class="relative shrink-0">
+    {% if card.has_user_back_image %}
+    <span class="absolute top-0 left-0 badge badge-xs badge-primary scale-75 z-10" title="Your photo">Y</span>
+    {% endif %}
     <button type="button"
             class="block shrink-0 p-0 border-0 bg-transparent cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-phillies-blue/60"
             data-card-lightbox-open
@@ -40,6 +49,7 @@
              onerror="this.classList.add('hidden'); this.nextElementSibling.classList.remove('hidden')">
         {{ card_image_thumb_placeholder(title="Back unavailable", hidden=true) }}
     </button>
+    </div>
     {% elif card.front_image_url %}
     {{ card_image_thumb_placeholder(title="No back scan") }}
     {% endif %}

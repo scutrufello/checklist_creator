@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 import cloudscraper
 
 from app.models import Card
+from app.image_scan_status import record_image_url_check
 from scraper.viewcard_parser import ParsedCardImages, parse_viewcard_images
 
 logger = logging.getLogger(__name__)
@@ -237,41 +238,44 @@ def apply_card_images(
     """
     Update card image URL columns (and optional local cache paths).
 
+    New URLs are merged per side — existing front/back URLs are not cleared when
+    ViewCard omits that side (important for partial-scan rechecks).
+
     Returns a summary dict for logging.
     """
-    card.image_front_url = parsed.front_url
-    card.image_back_url = parsed.back_url
+    if parsed.front_url:
+        card.image_front_url = parsed.front_url
+    if parsed.back_url:
+        card.image_back_url = parsed.back_url
 
     if not download or scraper is None:
         return {
-            "front_url": parsed.front_url,
-            "back_url": parsed.back_url,
+            "front_url": card.image_front_url,
+            "back_url": card.image_back_url,
             "front_local": card.image_front_local,
             "back_local": card.image_back_local,
         }
 
-    card.image_front_local = None
-    card.image_back_local = None
-
     referer = card.tcdb_url or ""
     sid_dir = str(tcdb_sid)
 
-    front_local = back_local = None
-    if parsed.front_url:
-        dest = os.path.join(image_root, sid_dir, _basename_from_url(parsed.front_url))
-        if download_tcdb_image(scraper, parsed.front_url, referer, dest):
-            front_local = os.path.join(sid_dir, _basename_from_url(parsed.front_url))
+    front_local = card.image_front_local
+    back_local = card.image_back_local
+    if card.image_front_url and not card.image_front_local:
+        dest = os.path.join(image_root, sid_dir, _basename_from_url(card.image_front_url))
+        if download_tcdb_image(scraper, card.image_front_url, referer, dest):
+            front_local = os.path.join(sid_dir, _basename_from_url(card.image_front_url))
             card.image_front_local = front_local
 
-    if parsed.back_url:
-        dest = os.path.join(image_root, sid_dir, _basename_from_url(parsed.back_url))
-        if download_tcdb_image(scraper, parsed.back_url, referer, dest):
-            back_local = os.path.join(sid_dir, _basename_from_url(parsed.back_url))
+    if card.image_back_url and not card.image_back_local:
+        dest = os.path.join(image_root, sid_dir, _basename_from_url(card.image_back_url))
+        if download_tcdb_image(scraper, card.image_back_url, referer, dest):
+            back_local = os.path.join(sid_dir, _basename_from_url(card.image_back_url))
             card.image_back_local = back_local
 
     return {
-        "front_url": parsed.front_url,
-        "back_url": parsed.back_url,
+        "front_url": card.image_front_url,
+        "back_url": card.image_back_url,
         "front_local": front_local,
         "back_local": back_local,
     }
@@ -370,4 +374,5 @@ def backfill_card_image(
         download=download,
         scraper=scraper,
     )
+    record_image_url_check(card, parsed)
     return parsed
