@@ -1056,7 +1056,9 @@ def toggle_card(
         return HTMLResponse("Card not found", status_code=404)
 
     card.owned = not card.owned
-    if not card.owned:
+    if card.owned:
+        card.on_the_way = False
+    else:
         card.wants_upgrade = False
     db.commit()
     db.refresh(card)
@@ -1081,6 +1083,26 @@ def toggle_card_upgrade(request: Request, card_id: int, db: Session = Depends(ge
         card.wants_upgrade = False
     else:
         card.wants_upgrade = not card.wants_upgrade
+    db.commit()
+    db.refresh(card)
+
+    return templates.TemplateResponse("components/card_toggle_sync.html", {
+        "request": request,
+        "card": card,
+    })
+
+
+@app.post("/api/card/{card_id}/toggle-on-the-way", response_class=HTMLResponse)
+def toggle_card_on_the_way(request: Request, card_id: int, db: Session = Depends(get_db)):
+    """Toggle purchased/in-transit flag (only when card is not owned)."""
+    card = db.query(Card).options(joinedload(Card.card_set)).filter_by(id=card_id).first()
+    if not card:
+        return HTMLResponse("Card not found", status_code=404)
+
+    if card.owned:
+        card.on_the_way = False
+    else:
+        card.on_the_way = not card.on_the_way
     db.commit()
     db.refresh(card)
 

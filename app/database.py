@@ -141,6 +141,24 @@ def _ensure_card_columns():
                 if "wants_upgrade" in existing_columns:
                     break
 
+    if "on_the_way" not in existing_columns:
+        for attempt in range(12):
+            try:
+                cur.execute(
+                    "ALTER TABLE cards ADD COLUMN on_the_way BOOLEAN NOT NULL DEFAULT 0"
+                )
+                break
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower() or attempt >= 11:
+                    raise
+                time.sleep(2)
+                conn.rollback()
+                cur = conn.cursor()
+                cur.execute("PRAGMA table_info(cards)")
+                existing_columns = {row[1] for row in cur.fetchall()}
+                if "on_the_way" in existing_columns:
+                    break
+
     image_columns = {
         "image_scan_status": "VARCHAR",
         "image_url_checked_at": "VARCHAR",

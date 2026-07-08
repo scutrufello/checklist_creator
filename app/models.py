@@ -117,6 +117,7 @@ class Card(Base):
     raw_tags_text = Column(String, nullable=True)
     tags = Column(Text, nullable=True)  # JSON array stored as text
     owned = Column(Boolean, default=False, nullable=False)
+    on_the_way = Column(Boolean, default=False, nullable=False)
     wants_upgrade = Column(Boolean, default=False, nullable=False)
     # If False, card still shows in checklist but is omitted from completion % (e.g. cosmetic print variants).
     counts_toward_completion = Column(Boolean, default=True, nullable=False)

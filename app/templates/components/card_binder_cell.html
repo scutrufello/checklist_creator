@@ -1,7 +1,7 @@
 {% from "components/user_photo_button.html" import user_photo_button %}
 {% macro card_binder_cell(card, oob=false) %}
 <div id="binder-card-{{ card.id }}"
-     class="card-binder-cell card-row flex flex-col rounded-lg border border-base-300 bg-base-100 p-1.5 sm:p-2 shadow-sm hover:shadow transition-shadow {% if card.owned %}card-row-owned{% endif %}{% if card.owned and card.wants_upgrade %} card-row-wants-upgrade{% endif %}"
+     class="card-binder-cell card-row flex flex-col rounded-lg border border-base-300 bg-base-100 p-1.5 sm:p-2 shadow-sm hover:shadow transition-shadow {% if card.owned and card.wants_upgrade %}card-row-wants-upgrade{% elif card.owned %}card-row-owned{% elif card.on_the_way %}card-row-on-the-way{% endif %}"
      data-owned="{{ 'true' if card.owned else 'false' }}"
      {% if oob %}hx-swap-oob="true"{% endif %}>
     <div class="relative aspect-[5/7] w-full mb-1.5 rounded overflow-hidden bg-base-200 border border-base-300/80">
@@ -50,7 +50,7 @@
         </div>
         {% endif %}
     </div>
-    <div class="flex justify-center items-center gap-2 mt-1.5 pt-1.5 border-t border-base-200/80">
+    <div class="flex justify-center items-center gap-1.5 mt-1.5 pt-1.5 border-t border-base-200/80">
         <input type="checkbox"
                class="checkbox checkbox-xs checkbox-success"
                {% if card.owned %}checked{% endif %}
@@ -58,6 +58,16 @@
                hx-target="#card-{{ card.id }}"
                hx-swap="outerHTML"
                aria-label="Owned"
+        />
+        <input type="checkbox"
+               class="checkbox checkbox-xs checkbox-info"
+               {% if card.on_the_way %}checked{% endif %}
+               {% if card.owned %}disabled{% endif %}
+               hx-post="/api/card/{{ card.id }}/toggle-on-the-way"
+               hx-target="#card-{{ card.id }}"
+               hx-swap="outerHTML"
+               aria-label="Bought — on the way"
+               title="Bought — on the way"
         />
         <input type="checkbox"
                class="checkbox checkbox-xs checkbox-warning"

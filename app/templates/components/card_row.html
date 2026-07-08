@@ -1,6 +1,6 @@
 {% from "components/card_image_macros.html" import card_table_images %}
 {% from "components/user_photo_button.html" import user_photo_button %}
-<tr id="card-{{ card.id }}" class="card-row hover:bg-base-200/50 transition-colors {% if card.owned %}card-row-owned{% endif %}{% if card.owned and card.wants_upgrade %} card-row-wants-upgrade{% endif %}" data-owned="{{ 'true' if card.owned else 'false' }}">
+<tr id="card-{{ card.id }}" class="card-row hover:bg-base-200/50 transition-colors {% if card.owned and card.wants_upgrade %}card-row-wants-upgrade{% elif card.owned %}card-row-owned{% elif card.on_the_way %}card-row-on-the-way{% endif %}" data-owned="{{ 'true' if card.owned else 'false' }}">
     <td class="text-center">
         <input type="checkbox"
                class="checkbox checkbox-sm checkbox-success"
@@ -9,6 +9,18 @@
                hx-target="#card-{{ card.id }}"
                hx-swap="outerHTML"
                aria-label="Owned"
+        />
+    </td>
+    <td class="text-center">
+        <input type="checkbox"
+               class="checkbox checkbox-sm checkbox-info"
+               {% if card.on_the_way %}checked{% endif %}
+               {% if card.owned %}disabled{% endif %}
+               hx-post="/api/card/{{ card.id }}/toggle-on-the-way"
+               hx-target="#card-{{ card.id }}"
+               hx-swap="outerHTML"
+               aria-label="Bought — on the way"
+               title="Bought — on the way"
         />
     </td>
     <td class="text-center">
@@ -35,7 +47,9 @@
         {% if card.variant_display %}
         <div class="text-xs text-base-content/60 mt-0.5">{{ card.variant_display }}</div>
         {% endif %}
-        {% if card.owned and card.wants_upgrade %}
+        {% if card.on_the_way and not card.owned %}
+        <div class="text-xs text-info mt-0.5">On the way</div>
+        {% elif card.owned and card.wants_upgrade %}
         <div class="text-xs text-warning mt-0.5">Upgrade wanted</div>
         {% endif %}
         <div class="mt-1 md:hidden">
