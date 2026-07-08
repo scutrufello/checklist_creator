@@ -556,10 +556,22 @@ def partition_numbered_unnumbered(
     unnumbered: list[dict] = []
     for row in parallels:
         cs = row["set"]
+        # Admin override takes precedence over name/tag heuristics.
+        if cs.parallel_is_numbered is True:
+            explicit_denom = cs.parallel_numbered_to or 0
+            row["parallel_denom"] = explicit_denom if explicit_denom > 0 else None
+            numbered.append((explicit_denom, row))
+            continue
+        if cs.parallel_is_numbered is False:
+            row["parallel_denom"] = None
+            unnumbered.append(row)
+            continue
         denom = serial_denominator_for_parallel(cs, serial_by_set_id)
         if denom is not None:
+            row["parallel_denom"] = denom
             numbered.append((denom, row))
         else:
+            row["parallel_denom"] = None
             unnumbered.append(row)
     numbered.sort(key=lambda item: (-item[0], (item[1]["set"].display_name or "").lower()))
     unnumbered.sort(key=lambda row: (row["set"].display_name or "").lower())

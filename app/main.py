@@ -1295,6 +1295,59 @@ def _admin_parent_options(db: Session, card_set: CardSet) -> list[CardSet]:
     )
 
 
+def _effective_relationship_type(card_set: CardSet) -> str:
+    return card_set.relationship_type or card_set.set_type or "standalone"
+
+
+def _parallel_numbering_label(card_set: CardSet) -> str:
+    if card_set.parallel_is_numbered is True:
+        if card_set.parallel_numbered_to:
+            return f"/{card_set.parallel_numbered_to}"
+        return "numbered"
+    if card_set.parallel_is_numbered is False:
+        return "unnumbered"
+    return "unknown"
+
+
+ADMIN_RELATIONSHIP_TYPES = ("parallel", "insert", "variation", "standalone", "base")
+
+
+def _relationship_type_sql_filter(rel_type: str):
+    """Match effective relationship type (relationship_type with set_type fallback)."""
+    return or_(
+        CardSet.relationship_type == rel_type,
+        and_(CardSet.relationship_type.is_(None), CardSet.set_type == rel_type),
+    )
+
+
+def _admin_set_name_search_filter(q: str):
+    pat = _search_like_pattern(q)
+    if not pat:
+        return None
+    return or_(
+        CardSet.full_name.ilike(pat),
+        CardSet.base_name.ilike(pat),
+        CardSet.variant_name.ilike(pat),
+        CardSet.display_name_override.ilike(pat),
+    )
+
+
+def _stats_by_set_ids(db: Session, set_ids: list[int]) -> dict[int, dict[str, int]]:
+    if not set_ids:
+        return {}
+    rows = (
+        db.query(
+            Card.set_id,
+            func.count(Card.id).label("total"),
+            func.sum(case((Card.owned == True, 1), else_=0)).label("owned"),
+        )
+        .filter(Card.set_id.in_(set_ids))
+        .group_by(Card.set_id)
+        .all()
+    )
+    return {row.set_id: {"total": row.total or 0, "owned": row.owned or 0} for row in rows}
+
+
 @app.get("/admin", response_class=HTMLResponse)
 def admin_index(request: Request, db: Session = Depends(get_db)):
     years = [row[0] for row in db.query(distinct(CardSet.year)).order_by(CardSet.year.desc()).all()]
@@ -1321,6 +1374,78 @@ def admin_year(request: Request, year: int, db: Session = Depends(get_db)):
     })
 
 
+@app.get("/admin/year/{year}/sets", response_class=HTMLResponse)
+def admin_year_sets(
+    request: Request,
+    year: int,
+    q: str = "",
+    rel_type: str = "",
+    product: str = "",
+    limit: int = 500,
+    db: Session = Depends(get_db),
+):
+    """Browse inserts, parallels, and other child sets for a year with text/type filters."""
+    rel_type = (rel_type or "").strip().lower()
+    if rel_type and rel_type not in ADMIN_RELATIONSHIP_TYPES:
+        rel_type = ""
+
+    query = db.query(CardSet).filter(CardSet.year == year)
+    if rel_type:
+        query = query.filter(_relationship_type_sql_filter(rel_type))
+    else:
+        query = query.filter(
+            or_(
+                _relationship_type_sql_filter("parallel"),
+                _relationship_type_sql_filter("insert"),
+                _relationship_type_sql_filter("variation"),
+                _relationship_type_sql_filter("standalone"),
+            )
+        )
+
+    product = (product or "").strip()
+    if product:
+        query = query.filter(CardSet.base_name == product)
+
+    name_filter = _admin_set_name_search_filter(q)
+    if name_filter is not None:
+        query = query.filter(name_filter)
+
+    limit = max(1, min(limit, 2000))
+    sets = query.order_by(CardSet.base_name, CardSet.full_name).limit(limit).all()
+
+    set_ids = [s.id for s in sets]
+    stats_by_id = _stats_by_set_ids(db, set_ids)
+
+    parent_ids = {s.canonical_parent_set_id for s in sets if s.canonical_parent_set_id}
+    parents_by_id = {}
+    if parent_ids:
+        parents_by_id = {p.id: p for p in db.query(CardSet).filter(CardSet.id.in_(parent_ids)).all()}
+
+    rows = []
+    for s in sets:
+        st = stats_by_id.get(s.id, {"total": 0, "owned": 0})
+        parent = parents_by_id.get(s.canonical_parent_set_id)
+        rows.append({
+            "set": s,
+            "relationship": _effective_relationship_type(s),
+            "parallel_numbering": _parallel_numbering_label(s),
+            "owned": st["owned"],
+            "total": st["total"],
+            "parent": parent,
+        })
+
+    return templates.TemplateResponse("admin_year_sets.html", {
+        "request": request,
+        "year": year,
+        "rows": rows,
+        "q": (q or "").strip(),
+        "rel_type": rel_type,
+        "product": product,
+        "limit": limit,
+        "relationship_types": ADMIN_RELATIONSHIP_TYPES,
+    })
+
+
 @app.get("/admin/year/{year}/set/{set_id}", response_class=HTMLResponse)
 def admin_set_view(request: Request, year: int, set_id: int, db: Session = Depends(get_db)):
     card_set = db.query(CardSet).filter_by(id=set_id, year=year).first()
@@ -1330,9 +1455,12 @@ def admin_set_view(request: Request, year: int, set_id: int, db: Session = Depen
     group = _admin_group_for_set(db, year, set_id)
     product_root = group["base_set"] if group else card_set
     is_product_root = product_root.id == card_set.id
+    effective_relationship = _effective_relationship_type(card_set)
+    show_year_page_settings = is_product_root and effective_relationship == "base"
+    show_relationship_editor = not show_year_page_settings
 
     tree_rows = []
-    if group and is_product_root:
+    if group and show_year_page_settings:
         for child in sorted(group["children"], key=lambda c: (c["set"].full_name or "").lower()):
             cs = child["set"]
             tree_rows.append({
@@ -1349,7 +1477,7 @@ def admin_set_view(request: Request, year: int, set_id: int, db: Session = Depen
         .limit(500)
         .all()
     )
-    parent_options = _admin_parent_options(db, card_set) if not is_product_root else []
+    parent_options = _admin_parent_options(db, card_set) if show_relationship_editor else []
 
     return templates.TemplateResponse("admin_set.html", {
         "request": request,
@@ -1357,6 +1485,8 @@ def admin_set_view(request: Request, year: int, set_id: int, db: Session = Depen
         "card_set": card_set,
         "product_root": product_root,
         "is_product_root": is_product_root,
+        "show_year_page_settings": show_year_page_settings,
+        "show_relationship_editor": show_relationship_editor,
         "group": group,
         "tree_rows": tree_rows,
         "cards": cards,
@@ -1387,6 +1517,8 @@ def admin_set_update(
     # Relationship fields (insert/parallel)
     relationship_type: str = Form(""),
     parent_id: int = Form(0),
+    parallel_numbering: str = Form("unknown"),
+    parallel_numbered_to: str = Form(""),
     relationship_manual: str = Form(""),
 ):
     card_set = db.query(CardSet).filter_by(id=set_id, year=year).first()
@@ -1396,8 +1528,11 @@ def admin_set_update(
     group = _admin_group_for_set(db, year, set_id)
     product_root = group["base_set"] if group else card_set
     is_product_root = product_root.id == card_set.id
+    effective_relationship = _effective_relationship_type(card_set)
+    show_year_page_settings = is_product_root and effective_relationship == "base"
+    show_relationship_editor = not show_year_page_settings
 
-    if is_product_root:
+    if show_year_page_settings:
         auto_category = auto_year_list_category(card_set)
         chosen_category = year_list_category.strip() if year_list_category else ""
         wants_manual = (
@@ -1422,9 +1557,26 @@ def admin_set_update(
 
     card_set.admin_notes = admin_notes.strip() or None
 
-    if not is_product_root and relationship_type:
+    if show_relationship_editor and relationship_type:
         card_set.relationship_type = relationship_type
         card_set.canonical_parent_set_id = None if parent_id == 0 else parent_id
+        if relationship_type == "parallel":
+            if parallel_numbering == "numbered":
+                card_set.parallel_is_numbered = True
+                card_set.parallel_numbered_to = (
+                    int(parallel_numbered_to.strip())
+                    if parallel_numbered_to.strip().isdigit()
+                    else None
+                )
+            elif parallel_numbering == "unnumbered":
+                card_set.parallel_is_numbered = False
+                card_set.parallel_numbered_to = None
+            else:
+                card_set.parallel_is_numbered = None
+                card_set.parallel_numbered_to = None
+        else:
+            card_set.parallel_is_numbered = None
+            card_set.parallel_numbered_to = None
         if relationship_manual == "on":
             card_set.relationship_source = "manual"
             card_set.relationship_confidence = 1.0
@@ -1484,16 +1636,32 @@ def relationships_review(
     year: int | None = None,
     max_conf: float = 0.85,
     limit: int = 500,
+    q: str = "",
+    rel_type: str = "",
     db: Session = Depends(get_db),
 ):
     """Review low-confidence or unresolved set relationships."""
-    query = db.query(CardSet).filter(
-        CardSet.relationship_type == "parallel",
-        (CardSet.relationship_confidence.is_(None)) | (CardSet.relationship_confidence < max_conf),
-    )
+    rel_type = (rel_type or "").strip().lower()
+    if rel_type and rel_type not in ADMIN_RELATIONSHIP_TYPES:
+        rel_type = ""
+
+    query = db.query(CardSet)
     if year is not None:
         query = query.filter(CardSet.year == year)
 
+    if rel_type:
+        query = query.filter(_relationship_type_sql_filter(rel_type))
+    else:
+        query = query.filter(
+            CardSet.relationship_type == "parallel",
+            (CardSet.relationship_confidence.is_(None)) | (CardSet.relationship_confidence < max_conf),
+        )
+
+    name_filter = _admin_set_name_search_filter(q)
+    if name_filter is not None:
+        query = query.filter(name_filter)
+
+    limit = max(1, min(limit, 2000))
     rows = query.order_by(CardSet.year.desc(), CardSet.base_name, CardSet.full_name).limit(limit).all()
     reviews = []
 
@@ -1522,6 +1690,9 @@ def relationships_review(
         "max_conf": max_conf,
         "limit": limit,
         "reviews": reviews,
+        "q": (q or "").strip(),
+        "rel_type": rel_type,
+        "relationship_types": ADMIN_RELATIONSHIP_TYPES,
     })
 
 
@@ -1533,6 +1704,8 @@ def relationships_update(
     year: int | None = Form(None),
     max_conf: float = Form(0.85),
     limit: int = Form(500),
+    q: str = Form(""),
+    rel_type: str = Form(""),
     db: Session = Depends(get_db),
 ):
     """Apply a manual relationship assignment from review UI."""
@@ -1546,7 +1719,11 @@ def relationships_update(
     card_set.relationship_source = "manual"
     db.commit()
 
-    target = f"/admin/relationships?max_conf={max_conf}&limit={limit}"
+    params: dict[str, str | int | float] = {"max_conf": max_conf, "limit": limit}
     if year is not None:
-        target += f"&year={year}"
-    return RedirectResponse(url=target, status_code=303)
+        params["year"] = year
+    if q.strip():
+        params["q"] = q.strip()
+    if rel_type.strip():
+        params["rel_type"] = rel_type.strip()
+    return RedirectResponse(url=f"/admin/relationships?{urlencode(params)}", status_code=303)

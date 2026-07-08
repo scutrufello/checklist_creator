@@ -11,6 +11,9 @@
             <summary class="flex items-center justify-between p-3 cursor-pointer">
                 <div class="flex items-center gap-2 min-w-0">
                     <span class="badge badge-sm badge-outline badge-secondary">parallel</span>
+                    <span class="badge badge-sm badge-primary">
+                        {% if p.parallel_denom %}/{{ p.parallel_denom }}{% else %}numbered{% endif %}
+                    </span>
                     <span class="truncate">{{ p.set.display_name }}</span>
                 </div>
                 <span class="text-sm text-base-content/60 shrink-0">{{ p.owned }}/{{ p.total }}</span>

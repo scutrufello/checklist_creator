@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% from "components/admin_set_filters.html" import admin_set_filter_bar %}
+
+{% block title %}Admin {{ year }} sets - Phillies Cards{% endblock %}
+
+{% block breadcrumb %}
+<div class="breadcrumbs text-sm mb-4">
+    <ul>
+        <li><a href="/" class="text-phillies-blue hover:text-phillies-red">Home</a></li>
+        <li><a href="/admin" class="text-phillies-blue hover:text-phillies-red">Admin</a></li>
+        <li><a href="/admin/year/{{ year }}" class="text-phillies-blue hover:text-phillies-red">{{ year }}</a></li>
+        <li class="font-semibold">Sets</li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-5">
+    <div>
+        <h1 class="text-2xl font-bold text-phillies-blue">{{ year }} inserts &amp; parallels</h1>
+        <p class="text-sm text-base-content/60 mt-1">Browse and edit relationship type / parent for child sets.</p>
+    </div>
+    <a href="/admin/year/{{ year }}" class="btn btn-sm btn-outline">Back to products</a>
+</div>
+
+{{ admin_set_filter_bar(
+    "/admin/year/" ~ year ~ "/sets",
+    q=q,
+    rel_type=rel_type,
+    relationship_types=relationship_types,
+    limit=limit,
+    product=product,
+) }}
+{% if product %}
+<div class="text-xs text-base-content/60 -mt-2 mb-3">Scoped to product: <span class="font-medium">{{ product }}</span></div>
+{% endif %}
+
+<div class="mb-3 text-sm text-base-content/60">
+    Showing {{ rows|length }} set{{ 's' if rows|length != 1 else '' }}{% if rows|length >= limit %} (limit reached){% endif %}.
+</div>
+
+<div class="overflow-x-auto bg-base-100 border border-base-200 rounded-lg">
+    <table class="table table-sm">
+        <thead>
+            <tr class="bg-base-200">
+                <th>Set</th>
+                <th>Product</th>
+                <th>Type</th>
+                <th>Parent</th>
+                <th>Progress</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr>
+                <td class="min-w-[14rem]">
+                    <div class="font-medium">{{ row.set.display_name }}</div>
+                    {% if row.set.variant_name and row.set.variant_name != row.set.display_name %}
+                    <div class="text-xs text-base-content/50 truncate max-w-md" title="{{ row.set.full_name }}">{{ row.set.full_name }}</div>
+                    {% endif %}
+                </td>
+                <td class="text-sm whitespace-nowrap">{{ row.set.base_name }}</td>
+                <td>
+                    <span class="badge badge-ghost badge-sm">{{ row.relationship }}</span>
+                    {% if row.relationship == 'parallel' %}
+                    <span class="badge badge-outline badge-xs">{{ row.parallel_numbering }}</span>
+                    {% endif %}
+                    {% if row.set.relationship_source == 'manual' %}
+                    <span class="badge badge-outline badge-xs">locked</span>
+                    {% endif %}
+                </td>
+                <td class="text-xs text-base-content/70 max-w-[12rem] truncate" title="{{ row.parent.full_name if row.parent else '' }}">
+                    {{ row.parent.display_name if row.parent else '—' }}
+                </td>
+                <td class="whitespace-nowrap">{{ row.owned }}/{{ row.total }}</td>
+                <td class="text-right whitespace-nowrap">
+                    <a href="/admin/year/{{ year }}/set/{{ row.set.id }}" class="btn btn-xs btn-primary">Edit</a>
+                    <a href="/set/{{ row.set.id }}/{{ row.set.url_slug }}" class="btn btn-xs btn-ghost">Open</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if not rows %}
+<div class="text-center py-12 text-base-content/50">
+    <p>No sets match these filters.</p>
+</div>
+{% endif %}
+{% endblock %}

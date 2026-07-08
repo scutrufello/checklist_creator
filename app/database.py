@@ -81,6 +81,8 @@ def _ensure_card_set_columns():
         "is_hidden": "BOOLEAN NOT NULL DEFAULT 0",
         "sort_order": "INTEGER",
         "counts_toward_completion": "BOOLEAN NOT NULL DEFAULT 1",
+        "parallel_is_numbered": "BOOLEAN",
+        "parallel_numbered_to": "INTEGER",
         "admin_notes": "TEXT",
         "category_source": "VARCHAR NOT NULL DEFAULT 'auto'",
         "relationship_source": "VARCHAR NOT NULL DEFAULT 'auto'",

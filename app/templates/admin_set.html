@@ -28,7 +28,7 @@
 </div>
 
 <form method="post" action="/admin/year/{{ year }}/set/{{ card_set.id }}/update" class="space-y-6">
-    {% if is_product_root %}
+    {% if show_year_page_settings %}
     <section class="bg-base-100 border border-base-200 rounded-lg p-4">
         <h2 class="text-lg font-semibold text-phillies-blue mb-3">Year page (product root)</h2>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -86,7 +86,7 @@
         </div>
     </section>
 
-    {% if not is_product_root %}
+    {% if show_relationship_editor %}
     <section class="bg-base-100 border border-base-200 rounded-lg p-4">
         <h2 class="text-lg font-semibold text-phillies-blue mb-3">Relationship</h2>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -108,6 +108,28 @@
                     {% endfor %}
                 </select>
             </label>
+            <label class="form-control">
+                <span class="label-text text-xs">Parallel numbering</span>
+                <select name="parallel_numbering" class="select select-bordered select-sm">
+                    <option value="unknown" {% if card_set.parallel_is_numbered is none %}selected{% endif %}>Unknown</option>
+                    <option value="numbered" {% if card_set.parallel_is_numbered is sameas true %}selected{% endif %}>Numbered</option>
+                    <option value="unnumbered" {% if card_set.parallel_is_numbered is sameas false %}selected{% endif %}>Unnumbered</option>
+                </select>
+                <span class="text-xs text-base-content/50 mt-1">Used when this set is a parallel.</span>
+            </label>
+            <label class="form-control">
+                <span class="label-text text-xs">Numbered to</span>
+                <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    name="parallel_numbered_to"
+                    value="{{ card_set.parallel_numbered_to if card_set.parallel_numbered_to is not none else '' }}"
+                    class="input input-bordered input-sm"
+                    placeholder="e.g. 25"
+                >
+                <span class="text-xs text-base-content/50 mt-1">Only used when Parallel numbering is set to Numbered.</span>
+            </label>
             <label class="label cursor-pointer justify-start gap-2 md:col-span-2">
                 <input type="checkbox" name="relationship_manual" value="on" class="checkbox checkbox-sm" {% if card_set.relationship_source == 'manual' %}checked{% endif %}>
                 <span class="label-text">Lock relationship (resolver will not overwrite)</span>
@@ -126,17 +148,40 @@
     <button type="submit" class="btn btn-primary">Save changes</button>
 </form>
 
-{% if is_product_root and tree_rows %}
-<section class="mt-8 bg-base-100 border border-base-200 rounded-lg p-4">
-    <h2 class="text-lg font-semibold text-phillies-blue mb-3">Product tree</h2>
+{% if show_year_page_settings and tree_rows %}
+<section class="mt-8 bg-base-100 border border-base-200 rounded-lg p-4" id="product-tree">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <h2 class="text-lg font-semibold text-phillies-blue">Product tree</h2>
+        <a href="/admin/year/{{ year }}/sets?product={{ card_set.base_name | urlencode }}" class="btn btn-xs btn-outline">Browse all in year</a>
+    </div>
+    <div class="flex flex-wrap gap-3 items-end mb-3">
+        <label class="form-control flex-1 min-w-[10rem]">
+            <span class="label-text text-xs">Filter by name</span>
+            <input type="search" id="product-tree-q" placeholder="Search sets…" class="input input-sm input-bordered w-full">
+        </label>
+        <label class="form-control">
+            <span class="label-text text-xs">Type</span>
+            <select id="product-tree-type" class="select select-sm select-bordered w-32">
+                <option value="">All</option>
+                <option value="parallel">parallel</option>
+                <option value="insert">insert</option>
+                <option value="variation">variation</option>
+                <option value="standalone">standalone</option>
+                <option value="base">base</option>
+            </select>
+        </label>
+        <span id="product-tree-count" class="text-xs text-base-content/50 pb-2"></span>
+    </div>
     <div class="overflow-x-auto">
         <table class="table table-sm">
             <thead>
                 <tr><th>Set</th><th>Type</th><th>Progress</th><th></th></tr>
             </thead>
-            <tbody>
+            <tbody id="product-tree-body">
                 {% for row in tree_rows %}
-                <tr>
+                <tr data-product-tree-row
+                    data-set-name="{{ row.set.full_name | lower }}"
+                    data-set-type="{{ row.relationship }}">
                     <td>{{ row.set.display_name }}</td>
                     <td><span class="badge badge-ghost badge-sm">{{ row.relationship }}</span></td>
                     <td>{{ row.owned }}/{{ row.total }}</td>
@@ -146,7 +191,34 @@
             </tbody>
         </table>
     </div>
+    <p id="product-tree-empty" class="hidden text-sm text-base-content/50 py-4 text-center">No sets match this filter.</p>
 </section>
+<script>
+(function () {
+    var qEl = document.getElementById("product-tree-q");
+    var typeEl = document.getElementById("product-tree-type");
+    var countEl = document.getElementById("product-tree-count");
+    var emptyEl = document.getElementById("product-tree-empty");
+    var rows = document.querySelectorAll("[data-product-tree-row]");
+    function apply() {
+        var q = (qEl.value || "").trim().toLowerCase();
+        var type = (typeEl.value || "").trim().toLowerCase();
+        var shown = 0;
+        rows.forEach(function (row) {
+            var name = row.getAttribute("data-set-name") || "";
+            var rowType = row.getAttribute("data-set-type") || "";
+            var ok = (!q || name.indexOf(q) !== -1) && (!type || rowType === type);
+            row.classList.toggle("hidden", !ok);
+            if (ok) shown += 1;
+        });
+        countEl.textContent = shown + " / " + rows.length;
+        emptyEl.classList.toggle("hidden", shown > 0);
+    }
+    qEl.addEventListener("input", apply);
+    typeEl.addEventListener("change", apply);
+    apply();
+})();
+</script>
 {% endif %}
 
 <section id="cards" class="mt-8 bg-base-100 border border-base-200 rounded-lg p-4">

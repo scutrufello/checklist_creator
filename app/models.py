@@ -44,6 +44,8 @@ class CardSet(Base):
     is_hidden = Column(Boolean, default=False, nullable=False)
     sort_order = Column(Integer, nullable=True)
     counts_toward_completion = Column(Boolean, default=True, nullable=False)
+    parallel_is_numbered = Column(Boolean, nullable=True)
+    parallel_numbered_to = Column(Integer, nullable=True)
     admin_notes = Column(Text, nullable=True)
     category_source = Column(String, nullable=False, default="auto")  # auto | manual
     relationship_source = Column(String, nullable=False, default="auto")  # auto | manual
