@@ -381,12 +381,17 @@ class TCDBScraper:
                     session.add(card_set)
                     session.flush()
 
-                # One row per TCDB card id inside a set. Using tcdb_cid avoids collisions on
-                # products where every card is "NNO" (e.g. 2025 Topps T205).
+                # tcdb_cid is globally unique, so look it up globally: TCDB sometimes moves a
+                # card to a renamed/split set (new sid), and a set-scoped lookup would then
+                # try to re-insert the same cid and crash the whole scrape.
                 variant_label = _variant_label(pc)
-                existing = session.query(Card).filter_by(
-                    set_id=card_set.id, tcdb_cid=pc.cid
-                ).first()
+                existing = session.query(Card).filter_by(tcdb_cid=pc.cid).first()
+                if existing is not None and existing.set_id != card_set.id:
+                    logger.info(
+                        "Card cid=%s moved set %s -> %s (%s); reassigning",
+                        pc.cid, existing.set_id, card_set.id, pc.set_name,
+                    )
+                    existing.set_id = card_set.id
                 if existing is None:
                     sort_num = _extract_sort_number(pc.number)
                     card = Card(
