@@ -19,6 +19,15 @@ _CRYSTAL_LASER_COLOR = re.compile(
 _COLOR_ONLY_ONE_WORD = frozenset({
     "gold", "silver", "blue", "red", "green", "orange", "purple", "pink",
     "black", "white", "yellow", "platinum", "bronze", "aqua", "sapphire",
+    "sky",
+})
+
+# Multi-word color / finish labels that are still base parallels (not insert families).
+_COLOR_ONLY_PHRASES = frozenset({
+    "hot pink",
+    "gold electricity",
+    "sky blue",
+    "superfractor",
 })
 
 # Topps-style "… Black (Series One)" paper parallels (no Refractor / Autographs in name).
@@ -35,10 +44,13 @@ def _single_token_color_parallel(variant_name: str) -> bool:
     stripped = variant_name.strip()
     if "(" in stripped:
         stripped = stripped.split("(", 1)[0].strip()
-    parts = stripped.lower().split()
+    cleaned = stripped.lower().rstrip(".,")
+    if cleaned in _COLOR_ONLY_PHRASES:
+        return True
+    parts = cleaned.split()
     if len(parts) != 1:
         return False
-    return parts[0].rstrip(".,") in _COLOR_ONLY_ONE_WORD
+    return parts[0] in _COLOR_ONLY_ONE_WORD
 
 
 def _autograph_plus_color_parallel(variant_lower: str) -> bool:
@@ -111,6 +123,7 @@ def classify_set_type(full_name: str, base_name: str, variant_name: str | None) 
         "die-cut", "die cut", "atomic", "wave", "lava", "speckle", "sparkle",
         "rainbow", "hyper", "crackle", "sapphire", "aqua", "pulsar",
         "mini", "numbered", "mega", "superfractor", "glowback",
+        "electricity", "printing plate", "printing plates",
     ]
     has_slash_serial = bool(re.search(r"/\d+", variant_lower))
     has_parallel_finish = (
